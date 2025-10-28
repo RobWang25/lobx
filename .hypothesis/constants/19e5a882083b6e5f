@@ -1,0 +1,4 @@
+# file: C:\Users\bobwa\Downloads\Masters\python-market-project\lobx\book.py
+# hypothesis_version: 6.142.4
+
+['active_orders', 'ask_levels', 'asks', 'best_ask', 'best_bid', 'bid_levels', 'bids', 'midprice', 'orders', 'price', 'quantity', 'spread', 'symbol', 'total_ask_quantity', 'total_bid_quantity', 'total_orders']
