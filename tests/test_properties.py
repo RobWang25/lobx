@@ -96,7 +96,6 @@ class TestOrderBookInvariants:
         """Order index should always match orders in book."""
         book = OrderBook("TEST")
         
-        # Make order IDs unique
         unique_orders = []
         seen_ids = set()
         for order in orders:
@@ -123,7 +122,6 @@ class TestOrderBookInvariants:
         """Cancelling orders should maintain book consistency."""
         book = OrderBook("TEST")
         
-        # Make order IDs unique
         unique_orders = []
         seen_ids = set()
         for order in orders:
@@ -351,7 +349,6 @@ class TestBookStructureInvariants:
         """Empty price level queues should be removed from book."""
         book = OrderBook("TEST")
         
-        # Make order IDs unique
         unique_orders = []
         seen_ids = set()
         for order in orders:
@@ -375,7 +372,6 @@ class TestBookStructureInvariants:
         """Every order in index should be in exactly one queue."""
         book = OrderBook("TEST")
         
-        # Make order IDs unique
         unique_orders = []
         seen_ids = set()
         for order in orders:
@@ -408,7 +404,6 @@ class TestCancellationInvariants:
         """Cancelled orders should not be in order index."""
         book = OrderBook("TEST")
         
-        # Make order IDs unique
         unique_orders = []
         seen_ids = set()
         for order in orders:
@@ -439,7 +434,6 @@ class TestCancellationInvariants:
         """Cancelled orders should have CANCELLED status."""
         book = OrderBook("TEST")
         
-        # Make order IDs unique
         unique_orders = []
         seen_ids = set()
         for order in orders:
