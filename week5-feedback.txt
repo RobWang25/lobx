@@ -1,0 +1,11 @@
+Final Project Checkpoint: 14/14
+10/10 Content
+4/4 Delivery
+
+Core Data Models & LOB Structure DONE
+Matching Engine + FIFO Fairness  DONE
+Deterministic Event Log + Replay DONE
+Benchmarks + Tests + Notebook DONE
+
+Feedback:
+You fully met and exceeded every Week 5 goal. The LOB matching engine event logger and deterministic replay system are all implemented. The breadth of testing (unit, integration, Hypothesis property tests) and detailed benchmark metrics is impressive.
