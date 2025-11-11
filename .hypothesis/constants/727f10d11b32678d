@@ -1,0 +1,4 @@
+# file: /Users/robertwang/Downloads/School/Intermediate Python/python-market-project/api/noise_trader.py
+# hypothesis_version: 6.141.1
+
+[1.0, '0.01', '0.50', '100.00', '140.00', '150.00', '350.00', 'AAPL', 'GOOGL', 'MSFT']

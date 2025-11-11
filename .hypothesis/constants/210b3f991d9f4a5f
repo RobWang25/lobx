@@ -1,0 +1,4 @@
+# file: /Users/robertwang/Downloads/School/Intermediate Python/python-market-project/api/market_maker.py
+# hypothesis_version: 6.141.1
+
+[-0.02, 0.02, 1.0, 100, '0.01', '0.10', '0.5', '1.0', '100.00', '140.00', '150.00', '2.0', '350.00', '5.0', 'AAPL', 'GOOGL', 'MSFT', 'extreme', 'high', 'low', 'market_maker', 'normal']
