@@ -18,7 +18,7 @@
             ws = new WebSocket('ws://localhost:8000/ws/market');
             
             ws.onopen = function() {
-                document.getElementById('status').textContent = '✅ Connected';
+                document.getElementById('status').textContent = 'Connected';
                 document.getElementById('status').style.color = 'green';
                 addMessage('Connected to market feed');
             };
@@ -29,11 +29,11 @@
             };
             
             ws.onerror = function(error) {
-                addMessage('❌ Error: ' + error);
+                addMessage('Error: ' + error);
             };
             
             ws.onclose = function() {
-                document.getElementById('status').textContent = '❌ Disconnected';
+                document.getElementById('status').textContent = 'Disconnected';
                 document.getElementById('status').style.color = 'red';
                 addMessage('Disconnected from market feed');
             };

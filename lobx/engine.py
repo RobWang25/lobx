@@ -1,6 +1,7 @@
 """
 Main trading engine coordinating order books and matching.
 """
+import asyncio
 from typing import Dict, List, Optional
 from datetime import datetime
 import time
@@ -22,7 +23,7 @@ class TradingEngine:
     - Statistics tracking
     """
     
-    def __init__(self, enable_logging: bool = True):
+    def __init__(self, enable_logging: bool = True, event_callback=None):
         """
         Initialize trading engine.
         
@@ -41,6 +42,8 @@ class TradingEngine:
         
         # Latency tracking
         self.latencies = []
+
+        self.event_callback = event_callback
     
     def submit_order(self, order: Order) -> List[Trade]:
         """
@@ -87,6 +90,12 @@ class TradingEngine:
         # Track latency
         latency = (time.perf_counter() - start_time) * 1000  # ms
         self.latencies.append(latency)
+
+        if self.event_callback:
+            asyncio.create_task(self.event_callback('order_submitted', order))
+        for trade in trades:
+            if self.event_callback:
+                asyncio.create_task(self.event_callback('trade_executed', trade))
         
         return trades
     

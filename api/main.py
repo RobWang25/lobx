@@ -1,11 +1,11 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, ConfigDict, field_serializer
-from typing import Optional, List, Dict
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, field_serializer
+from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime
 import asyncio
-import json
 from contextlib import asynccontextmanager
 
 from lobx.engine import TradingEngine
@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
     
     # Startup
     start_time = datetime.now()
-    trading_engine = TradingEngine()
+    trading_engine = TradingEngine(event_callback=trading_event_callback)
     
     # Initialize symbols - TradingEngine creates books on-demand
     # No need to explicitly add symbols
@@ -341,3 +341,34 @@ async def root():
         "status": "running",
         "docs": "/docs"
     }
+
+async def trading_event_callback(event_type, data):
+    """Callback for trading events"""
+    if event_type == 'order_submitted':
+        await connection_manager.broadcast_market_data({
+            "type": "order_submitted",
+            "order": {
+                "order_id": data.order_id,
+                "symbol": data.symbol,
+                "user_id": data.user_id,
+                "side": data.side.value,
+                "price": str(data.price),
+                "quantity": str(data.quantity),
+                "timestamp": data.timestamp.isoformat()
+            }
+        })
+    elif event_type == 'trade_executed':
+        await connection_manager.broadcast_market_data({
+            "type": "trade_executed",
+            "trade": {
+                "trade_id": data.trade_id,
+                "symbol": data.symbol,
+                "price": str(data.price),
+                "quantity": data.quantity,
+                "buyer": data.buyer_user_id,
+                "seller": data.seller_user_id,
+                "timestamp": data.timestamp.isoformat()
+            }
+        })
+
+app.mount("/static", StaticFiles(directory="api/static"), name="static")

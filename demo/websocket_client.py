@@ -19,19 +19,19 @@ async def watch_market():
                 
                 # Pretty print the update
                 if data.get("type") == "stats_update":
-                    print(f"📊 Stats Update: {data['stats']}")
+                    print(f"Stats Update: {data['stats']}")
                 elif data.get("type") == "order_submitted":
                     order = data["order"]
-                    print(f"📝 New Order: {order['side']} {order['quantity']} {order['symbol']} @ ${order['price']}")
+                    print(f"New Order: {order['side']} {order['quantity']} {order['symbol']} @ ${order['price']}")
                 elif data.get("type") == "order_cancelled":
-                    print(f"❌ Order Cancelled: {data['order_id']}")
+                    print(f"Order Cancelled: {data['order_id']}")
                 else:
-                    print(f"📨 {data}")
+                    print(f"{data}")
                     
         except websockets.exceptions.ConnectionClosed:
-            print("\n❌ Connection closed")
+            print("\nConnection closed")
         except KeyboardInterrupt:
-            print("\n👋 Disconnecting...")
+            print("\nDisconnecting...")
 
 if __name__ == "__main__":
     asyncio.run(watch_market())

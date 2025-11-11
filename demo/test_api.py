@@ -14,7 +14,7 @@ def print_response(name, response):
     print(json.dumps(response.json(), indent=2))
 
 # 1. Check API is running
-print("🚀 Testing Trading Exchange API")
+print("Testing Trading Exchange API")
 response = requests.get(f"{BASE_URL}/")
 print_response("API Info", response)
 
@@ -69,4 +69,4 @@ print_response("Final Stats", response)
 response = requests.delete(f"{BASE_URL}/orders/AAPL/{buy_order_id}")
 print_response("Cancel Order", response)
 
-print("\n✅ Demo complete!")
+print("\nDemo complete!")
