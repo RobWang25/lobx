@@ -1,0 +1,48 @@
+Final Project Checkpoint: 14/14
+10/10 Content
+4/4 Delivery
+
+Week 7 Goals:
+DONE /orders
+DONE /orders/{id} (cancel)
+DONE /book/{symbol}
+DONE /stats
+DONE WebSocket: /ws/market
+DONE WebSocket: /ws/account/{user_id}
+DONE CORS enabled
+DONE Server bound to 0.0.0.0
+DONE Market Maker coroutine
+DONE Noise trader coroutines
+DONE Multiple symbols (AAPL, MSFT, GOOGL)
+DONE Dynamic price movement
+DONE Orders streaming through websockets
+DONE User-submitted orders trade with simulation orders
+DONE Background broadcaster pushes stats
+DONE P50/P95/P99 latency tracking
+DONE Throughput measurement
+DONE Determinism
+DONE FIFO compliance tests
+DONE Replay logger
+DONE Overall performance metrics in README
+DONE Latency recorded per order in engine
+DONE Running FastAPI app
+DONE Demo clients (watch_market.py, watch_account.py)
+DONE Documentation (websockets_guide.md, performance results, README)
+DONE Multi-device access instructions
+
+
+Notes:
+Exceptionally strong project going far beyond expectations you seem to be from from the trading industry?
+The exchange engine, orderbook, matching engine, and simulations are all working correctly. The Websockets are robust and test cases are very comprehensive. The architecture is well designed no circular imports clean abstractions and highly readable good documentation impressive use of async. 
+Also want to commend you on including clear run/install/troubleshooting guide which makes the system easy to set up and debug.
+
+Areas to improve (OPTIONAL): 
+You already built a remarkably complete backend with real time streaming performance benchmarking and deterministic replay. Now you could consider a lightweight web interface or Python GUI that connects to your market feed and renders 10 levels from the orderbook:
+
+BQty Bid    Ask    AQty	 Recent Trades (scrolling)
+40	149.95	150.00	32	TRADE: 100 @ 150.01
+25	149.90	150.05	20	TRADE: 50 @ 150.02
+...
+
+Features: select ticker from dropdown, Show order book 10 levels deep, Submit order from UI, 
+Optional addition include per user P&L tracking
