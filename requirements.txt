@@ -3,3 +3,6 @@ httpx
 uvicorn
 requests
 websockets
+streamlit
+plotly
+pandas

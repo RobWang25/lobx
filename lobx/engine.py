@@ -9,7 +9,9 @@ import time
 from .models import Order, Trade, OrderStatus
 from .book import OrderBook
 from .matching import MatchingEngine
+from .async_matching import AsyncMatchingEngine
 from .replay import EventLogger
+from .profiler import PerformanceProfiler, LatencyTracker
 
 
 class TradingEngine:
@@ -21,17 +23,34 @@ class TradingEngine:
     - Order matching
     - Event logging for replay
     - Statistics tracking
+    - Performance profiling
     """
     
-    def __init__(self, enable_logging: bool = True, event_callback=None):
+    def __init__(
+        self, 
+        enable_logging: bool = True, 
+        event_callback=None,
+        use_async: bool = False,
+        enable_profiling: bool = False
+    ):
         """
         Initialize trading engine.
         
         Args:
             enable_logging: Enable event logging for replay
+            event_callback: Callback for trading events
+            use_async: Use async matching engine
+            enable_profiling: Enable performance profiling
         """
         self.books: Dict[str, OrderBook] = {}
-        self.matching_engine = MatchingEngine()
+        self.use_async = use_async
+        
+        # Use async or sync matching engine
+        if use_async:
+            self.matching_engine = AsyncMatchingEngine()
+        else:
+            self.matching_engine = MatchingEngine()
+        
         self.event_logger = EventLogger() if enable_logging else None
         
         # Statistics
@@ -42,6 +61,12 @@ class TradingEngine:
         
         # Latency tracking
         self.latencies = []
+        
+        # Performance profiling
+        self.profiler = PerformanceProfiler() if enable_profiling else None
+        self.latency_tracker = LatencyTracker()
+        if enable_profiling and self.profiler:
+            self.profiler.enable()
 
         self.event_callback = event_callback
     
@@ -64,6 +89,15 @@ class TradingEngine:
         """
         start_time = time.perf_counter()
         
+        # Profile if enabled
+        if self.profiler:
+            with self.profiler.measure_operation('submit_order'):
+                return self._submit_order_impl(order, start_time)
+        else:
+            return self._submit_order_impl(order, start_time)
+    
+    def _submit_order_impl(self, order: Order, start_time: float) -> List[Trade]:
+        """Internal submit order implementation"""
         # Get or create book
         if order.symbol not in self.books:
             self.books[order.symbol] = OrderBook(order.symbol)
@@ -71,11 +105,19 @@ class TradingEngine:
         book = self.books[order.symbol]
         
         # Match order
-        trades, remaining_order = self.matching_engine.match_order(order, book)
+        if self.profiler:
+            with self.profiler.measure_operation('match_order'):
+                trades, remaining_order = self.matching_engine.match_order(order, book)
+        else:
+            trades, remaining_order = self.matching_engine.match_order(order, book)
         
         # Add remaining order to book if not fully filled
         if remaining_order.status != OrderStatus.FILLED:
-            book.add_order(remaining_order)
+            if self.profiler:
+                with self.profiler.measure_operation('add_to_book'):
+                    book.add_order(remaining_order)
+            else:
+                book.add_order(remaining_order)
         
         # Log events
         if self.event_logger:
@@ -90,6 +132,7 @@ class TradingEngine:
         # Track latency
         latency = (time.perf_counter() - start_time) * 1000  # ms
         self.latencies.append(latency)
+        self.latency_tracker.record('submit_order', latency)
 
         if self.event_callback:
             asyncio.create_task(self.event_callback('order_submitted', order))
@@ -170,7 +213,7 @@ class TradingEngine:
         for symbol, book in self.books.items():
             book_stats[symbol] = book.get_statistics()
         
-        return {
+        stats = {
             "uptime_seconds": uptime,
             "total_orders_submitted": self.total_orders_submitted,
             "total_orders_cancelled": self.total_orders_cancelled,
@@ -181,6 +224,31 @@ class TradingEngine:
             "active_symbols": len(self.books),
             "books": book_stats
         }
+        
+        # Add profiling data if available
+        if self.profiler:
+            stats["profiler_metrics"] = self.profiler.get_custom_metrics()
+        
+        # Add detailed latency tracking
+        stats["operation_latencies"] = self.latency_tracker.get_stats()
+        
+        return stats
+    
+    def get_profiling_report(self, sort_by='cumulative', top_n=20) -> str:
+        """
+        Get detailed profiling report.
+        
+        Args:
+            sort_by: Sort order ('cumulative', 'time', 'calls')
+            top_n: Number of top functions to return
+            
+        Returns:
+            String with formatted profiling statistics
+        """
+        if not self.profiler:
+            return "Profiling not enabled"
+        
+        return self.profiler.get_stats(sort_by, top_n)
     
     def reset_statistics(self):
         """Reset statistics counters."""

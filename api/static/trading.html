@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Terminal</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #0e0e0e;
+            color: #e0e0e0;
+            overflow-x: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 300px 1fr 350px;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+            gap: 1px;
+            background: #1a1a1a;
+        }
+
+        /* Header */
+        .header {
+            grid-column: 1 / -1;
+            background: #1a1a1a;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .symbol-tabs {
+            display: flex;
+            gap: 10px;
+        }
+
+        .symbol-tab {
+            padding: 8px 16px;
+            background: #2a2a2a;
+            border: none;
+            border-radius: 4px;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .symbol-tab:hover {
+            background: #3a3a3a;
+        }
+
+        .symbol-tab.active {
+            background: #0066cc;
+            color: #ffffff;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #888;
+        }
+
+        .status-dot.connected {
+            background: #00ff00;
+            box-shadow: 0 0 8px #00ff00;
+        }
+
+        /* Left Panel - Order Entry */
+        .order-panel {
+            background: #161616;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #ffffff;
+        }
+
+        .order-type-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+
+        .order-type-btn {
+            flex: 1;
+            padding: 10px;
+            background: #2a2a2a;
+            border: none;
+            border-radius: 4px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .order-type-btn.active {
+            background: #0066cc;
+            color: #ffffff;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #999;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            background: #2a2a2a;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #0066cc;
+        }
+
+        .order-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 14px;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-buy {
+            background: #00aa00;
+            color: #ffffff;
+        }
+
+        .btn-buy:hover {
+            background: #00cc00;
+        }
+
+        .btn-sell {
+            background: #cc0000;
+            color: #ffffff;
+        }
+
+        .btn-sell:hover {
+            background: #ff0000;
+        }
+
+        .quick-trade {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #2a2a2a;
+        }
+
+        .quick-trade-title {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #999;
+        }
+
+        .quick-amounts {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .quick-amount-btn {
+            padding: 8px;
+            background: #2a2a2a;
+            border: none;
+            border-radius: 4px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .quick-amount-btn:hover {
+            background: #3a3a3a;
+        }
+
+        /* Center Panel - Chart and Order Book */
+        .center-panel {
+            background: #161616;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chart-container {
+            flex: 1;
+            padding: 20px;
+            position: relative;
+        }
+
+        .orderbook-container {
+            height: 400px;
+            border-top: 1px solid #2a2a2a;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .orderbook-side {
+            overflow-y: auto;
+        }
+
+        .orderbook-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            padding: 8px;
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
+            border-bottom: 1px solid #2a2a2a;
+            position: sticky;
+            top: 0;
+            background: #161616;
+        }
+
+        .orderbook-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            padding: 6px 8px;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            position: relative;
+        }
+
+        .orderbook-row:hover {
+            background: #1a1a1a;
+            cursor: pointer;
+        }
+
+        .orderbook-row-bg {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            opacity: 0.1;
+        }
+
+        .bid-row .orderbook-row-bg {
+            background: #00aa00;
+        }
+
+        .ask-row .orderbook-row-bg {
+            background: #cc0000;
+        }
+
+        .bid-price {
+            color: #00ff00;
+        }
+
+        .ask-price {
+            color: #ff4444;
+        }
+
+        .spread-info {
+            text-align: center;
+            padding: 12px;
+            background: #1a1a1a;
+            margin: 0 20px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .spread-value {
+            font-weight: 600;
+            color: #0066cc;
+        }
+
+        /* Right Panel - Positions and Trades */
+        .right-panel {
+            background: #161616;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .portfolio-summary {
+            padding: 20px;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .portfolio-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .portfolio-label {
+            color: #999;
+        }
+
+        .portfolio-value {
+            font-weight: 600;
+        }
+
+        .profit-positive {
+            color: #00ff00;
+        }
+
+        .profit-negative {
+            color: #ff4444;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px;
+            background: #161616;
+            border: none;
+            color: #999;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .tab.active {
+            color: #ffffff;
+            border-bottom: 2px solid #0066cc;
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .trade-item, .order-item {
+            padding: 12px;
+            background: #1a1a1a;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .trade-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .trade-symbol {
+            font-weight: 600;
+        }
+
+        .trade-time {
+            color: #666;
+            font-size: 11px;
+        }
+
+        .trade-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            font-size: 12px;
+        }
+
+        .trade-label {
+            color: #999;
+        }
+
+        .order-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            background: #2a2a2a;
+            color: #e0e0e0;
+        }
+
+        .btn-small:hover {
+            background: #3a3a3a;
+        }
+
+        .btn-danger {
+            background: #cc0000;
+            color: #ffffff;
+        }
+
+        .btn-danger:hover {
+            background: #ff0000;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 60px auto auto auto;
+            }
+
+            .order-panel, .center-panel, .right-panel {
+                grid-column: 1;
+            }
+
+            .orderbook-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 16px;
+            }
+
+            .symbol-tabs {
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+
+            .symbol-tab {
+                padding: 6px 12px;
+                font-size: 13px;
+            }
+
+            .chart-container {
+                height: 250px;
+            }
+
+            .orderbook-container {
+                height: 300px;
+                padding: 10px;
+            }
+        }
+
+        .notification {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 16px 20px;
+            background: #1a1a1a;
+            border-left: 4px solid #0066cc;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+            max-width: 350px;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .notification.success {
+            border-left-color: #00aa00;
+        }
+
+        .notification.error {
+            border-left-color: #cc0000;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🔷 Trading Terminal</h1>
+            <div class="symbol-tabs" id="symbolTabs">
+                <button class="symbol-tab active" data-symbol="AAPL">AAPL</button>
+                <button class="symbol-tab" data-symbol="GOOGL">GOOGL</button>
+                <button class="symbol-tab" data-symbol="MSFT">MSFT</button>
+            </div>
+            <div class="connection-status">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+
+        <!-- Left Panel - Order Entry -->
+        <div class="order-panel">
+            <div class="panel-title">Place Order</div>
+            
+            <div class="order-type-tabs">
+                <button class="order-type-btn active" data-type="limit">Limit</button>
+                <button class="order-type-btn" data-type="market">Market</button>
+            </div>
+
+            <div class="form-group">
+                <label>User ID</label>
+                <input type="text" id="userId" value="trader_1" placeholder="Enter user ID">
+            </div>
+
+            <div class="form-group" id="priceGroup">
+                <label>Price</label>
+                <input type="number" id="orderPrice" step="0.01" placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+                <label>Quantity</label>
+                <input type="number" id="orderQuantity" step="1" value="100" placeholder="0">
+            </div>
+
+            <div class="order-buttons">
+                <button class="btn btn-buy" onclick="submitOrder('BUY')">Buy</button>
+                <button class="btn btn-sell" onclick="submitOrder('SELL')">Sell</button>
+            </div>
+
+            <div class="quick-trade">
+                <div class="quick-trade-title">Quick Amounts</div>
+                <div class="quick-amounts">
+                    <button class="quick-amount-btn" onclick="setQuantity(10)">10</button>
+                    <button class="quick-amount-btn" onclick="setQuantity(50)">50</button>
+                    <button class="quick-amount-btn" onclick="setQuantity(100)">100</button>
+                    <button class="quick-amount-btn" onclick="setQuantity(250)">250</button>
+                    <button class="quick-amount-btn" onclick="setQuantity(500)">500</button>
+                    <button class="quick-amount-btn" onclick="setQuantity(1000)">1000</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Panel - Chart and Order Book -->
+        <div class="center-panel">
+            <div class="chart-container">
+                <canvas id="priceChart"></canvas>
+            </div>
+
+            <div class="spread-info">
+                Spread: <span class="spread-value" id="spreadValue">--</span> | 
+                Mid Price: <span class="spread-value" id="midPrice">--</span>
+            </div>
+
+            <div class="orderbook-container">
+                <div class="orderbook-side">
+                    <div class="orderbook-header">
+                        <div>Price</div>
+                        <div>Size</div>
+                        <div>Total</div>
+                    </div>
+                    <div id="bidsContainer"></div>
+                </div>
+                <div class="orderbook-side">
+                    <div class="orderbook-header">
+                        <div>Price</div>
+                        <div>Size</div>
+                        <div>Total</div>
+                    </div>
+                    <div id="asksContainer"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - Positions and Trades -->
+        <div class="right-panel">
+            <div class="portfolio-summary">
+                <div class="panel-title">Portfolio</div>
+                <div class="portfolio-item">
+                    <span class="portfolio-label">Position:</span>
+                    <span class="portfolio-value" id="position">0</span>
+                </div>
+                <div class="portfolio-item">
+                    <span class="portfolio-label">Avg Price:</span>
+                    <span class="portfolio-value" id="avgPrice">--</span>
+                </div>
+                <div class="portfolio-item">
+                    <span class="portfolio-label">P&L:</span>
+                    <span class="portfolio-value" id="pnl">$0.00</span>
+                </div>
+                <div class="portfolio-item">
+                    <span class="portfolio-label">Total Trades:</span>
+                    <span class="portfolio-value" id="totalTrades">0</span>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('trades')">Trades</button>
+                <button class="tab" onclick="switchTab('orders')">Orders</button>
+            </div>
+
+            <div class="tab-content" id="tradesTab">
+                <!-- Trades will be populated here -->
+            </div>
+
+            <div class="tab-content" id="ordersTab" style="display: none;">
+                <!-- Orders will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let ws = null;
+        let currentSymbol = 'AAPL';
+        let orderType = 'limit';
+        let orderBook = { bids: [], asks: [] };
+        let trades = [];
+        let orders = [];
+        let positions = {};
+        let priceHistory = [];
+        let chart = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            initWebSocket();
+            initChart();
+            initEventListeners();
+            setInterval(updatePnL, 1000);
+        });
+
+        // WebSocket Connection
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            ws = new WebSocket(`${protocol}//${host}/ws/market`);
+
+            ws.onopen = function() {
+                updateConnectionStatus(true);
+                loadOrderBook();
+            };
+
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+
+            ws.onclose = function() {
+                updateConnectionStatus(false);
+                setTimeout(initWebSocket, 3000);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                updateConnectionStatus(false);
+            };
+        }
+
+        function updateConnectionStatus(connected) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            
+            if (connected) {
+                dot.classList.add('connected');
+                text.textContent = 'Connected';
+            } else {
+                dot.classList.remove('connected');
+                text.textContent = 'Disconnected';
+            }
+        }
+
+        function handleWebSocketMessage(data) {
+            switch(data.type) {
+                case 'order_submitted':
+                    handleOrderUpdate(data.order);
+                    loadOrderBook();
+                    break;
+                case 'trade_executed':
+                    handleTradeUpdate(data.trade);
+                    loadOrderBook();
+                    break;
+                case 'order_cancelled':
+                    loadOrderBook();
+                    break;
+                case 'stats_update':
+                    // Handle stats updates
+                    break;
+            }
+        }
+
+        // Chart Initialization
+        function initChart() {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Price',
+                        data: [],
+                        borderColor: '#0066cc',
+                        backgroundColor: 'rgba(0, 102, 204, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                color: '#2a2a2a'
+                            },
+                            ticks: {
+                                color: '#666'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: '#2a2a2a'
+                            },
+                            ticks: {
+                                color: '#666'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateChart(price) {
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString();
+            
+            priceHistory.push({ time: timeLabel, price: price });
+            
+            // Keep last 50 data points
+            if (priceHistory.length > 50) {
+                priceHistory.shift();
+            }
+            
+            chart.data.labels = priceHistory.map(p => p.time);
+            chart.data.datasets[0].data = priceHistory.map(p => p.price);
+            chart.update('none');
+        }
+
+        // Event Listeners
+        function initEventListeners() {
+            // Symbol tabs
+            document.querySelectorAll('.symbol-tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.symbol-tab').forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    currentSymbol = this.dataset.symbol;
+                    loadOrderBook();
+                    priceHistory = [];
+                });
+            });
+
+            // Order type tabs
+            document.querySelectorAll('.order-type-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.order-type-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    orderType = this.dataset.type;
+                    
+                    const priceGroup = document.getElementById('priceGroup');
+                    if (orderType === 'market') {
+                        priceGroup.style.display = 'none';
+                    } else {
+                        priceGroup.style.display = 'block';
+                    }
+                });
+            });
+
+            // Click on order book to populate price
+            document.addEventListener('click', function(e) {
+                const row = e.target.closest('.orderbook-row');
+                if (row) {
+                    const price = row.querySelector('.bid-price, .ask-price').textContent;
+                    document.getElementById('orderPrice').value = price;
+                }
+            });
+        }
+
+        // Load Order Book
+        async function loadOrderBook() {
+            try {
+                const response = await fetch(`/book/${currentSymbol}?depth=10`);
+                const data = await response.json();
+                
+                orderBook = data;
+                renderOrderBook();
+                updateSpread();
+                
+                if (data.mid_price) {
+                    updateChart(parseFloat(data.mid_price));
+                }
+            } catch (error) {
+                console.error('Error loading order book:', error);
+            }
+        }
+
+        function renderOrderBook() {
+            const bidsContainer = document.getElementById('bidsContainer');
+            const asksContainer = document.getElementById('asksContainer');
+            
+            // Render bids
+            bidsContainer.innerHTML = orderBook.bids.map(level => {
+                const total = level.quantity;
+                const maxTotal = Math.max(...orderBook.bids.map(l => l.quantity));
+                const percentage = (total / maxTotal) * 100;
+                
+                return `
+                    <div class="orderbook-row bid-row">
+                        <div style="position: relative; z-index: 1;">
+                            <span class="bid-price">${parseFloat(level.price).toFixed(2)}</span>
+                        </div>
+                        <div style="position: relative; z-index: 1;">${level.quantity}</div>
+                        <div style="position: relative; z-index: 1;">${total}</div>
+                        <div class="orderbook-row-bg" style="width: ${percentage}%;"></div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Render asks
+            asksContainer.innerHTML = orderBook.asks.map(level => {
+                const total = level.quantity;
+                const maxTotal = Math.max(...orderBook.asks.map(l => l.quantity));
+                const percentage = (total / maxTotal) * 100;
+                
+                return `
+                    <div class="orderbook-row ask-row">
+                        <div style="position: relative; z-index: 1;">
+                            <span class="ask-price">${parseFloat(level.price).toFixed(2)}</span>
+                        </div>
+                        <div style="position: relative; z-index: 1;">${level.quantity}</div>
+                        <div style="position: relative; z-index: 1;">${total}</div>
+                        <div class="orderbook-row-bg" style="width: ${percentage}%;"></div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateSpread() {
+            const spreadEl = document.getElementById('spreadValue');
+            const midPriceEl = document.getElementById('midPrice');
+            
+            if (orderBook.spread) {
+                spreadEl.textContent = parseFloat(orderBook.spread).toFixed(2);
+            } else {
+                spreadEl.textContent = '--';
+            }
+            
+            if (orderBook.mid_price) {
+                midPriceEl.textContent = parseFloat(orderBook.mid_price).toFixed(2);
+            } else {
+                midPriceEl.textContent = '--';
+            }
+        }
+
+        // Submit Order
+        async function submitOrder(side) {
+            const userId = document.getElementById('userId').value;
+            const quantity = document.getElementById('orderQuantity').value;
+            let price;
+            
+            if (orderType === 'market') {
+                // Use best bid/ask for market orders
+                if (side === 'BUY' && orderBook.asks.length > 0) {
+                    price = orderBook.asks[0].price;
+                } else if (side === 'SELL' && orderBook.bids.length > 0) {
+                    price = orderBook.bids[0].price;
+                } else {
+                    showNotification('No liquidity available', 'error');
+                    return;
+                }
+            } else {
+                price = document.getElementById('orderPrice').value;
+            }
+            
+            if (!userId || !price || !quantity) {
+                showNotification('Please fill all fields', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/orders', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        symbol: currentSymbol,
+                        user_id: userId,
+                        side: side,
+                        price: price,
+                        quantity: quantity
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showNotification(`Order ${side} ${quantity} @ ${price} submitted`, 'success');
+                    orders.unshift(data);
+                    renderOrders();
+                    await loadOrderBook();
+                } else {
+                    const error = await response.json();
+                    showNotification(`Error: ${error.detail}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error submitting order:', error);
+                showNotification('Failed to submit order', 'error');
+            }
+        }
+
+        // Cancel Order
+        async function cancelOrder(orderId) {
+            try {
+                const response = await fetch(`/orders/${currentSymbol}/${orderId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showNotification('Order cancelled', 'success');
+                    orders = orders.filter(o => o.order_id !== orderId);
+                    renderOrders();
+                    await loadOrderBook();
+                } else {
+                    showNotification('Failed to cancel order', 'error');
+                }
+            } catch (error) {
+                console.error('Error cancelling order:', error);
+                showNotification('Failed to cancel order', 'error');
+            }
+        }
+
+        // Handle Updates
+        function handleOrderUpdate(order) {
+            if (order.symbol === currentSymbol) {
+                orders.unshift(order);
+                renderOrders();
+            }
+        }
+
+        function handleTradeUpdate(trade) {
+            if (trade.symbol === currentSymbol) {
+                trades.unshift(trade);
+                renderTrades();
+                
+                const userId = document.getElementById('userId').value;
+                if (trade.buyer === userId || trade.seller === userId) {
+                    updatePosition(trade, userId);
+                    updateChart(parseFloat(trade.price));
+                }
+            }
+        }
+
+        function updatePosition(trade, userId) {
+            if (!positions[currentSymbol]) {
+                positions[currentSymbol] = {
+                    quantity: 0,
+                    totalCost: 0,
+                    trades: []
+                };
+            }
+            
+            const pos = positions[currentSymbol];
+            const price = parseFloat(trade.price);
+            const quantity = parseInt(trade.quantity);
+            
+            if (trade.buyer === userId) {
+                pos.quantity += quantity;
+                pos.totalCost += price * quantity;
+            } else if (trade.seller === userId) {
+                pos.quantity -= quantity;
+                pos.totalCost -= price * quantity;
+            }
+            
+            pos.trades.push(trade);
+            updatePortfolioDisplay();
+        }
+
+        function updatePortfolioDisplay() {
+            const pos = positions[currentSymbol];
+            
+            if (pos) {
+                document.getElementById('position').textContent = pos.quantity;
+                
+                if (pos.quantity !== 0) {
+                    const avgPrice = pos.totalCost / pos.quantity;
+                    document.getElementById('avgPrice').textContent = avgPrice.toFixed(2);
+                } else {
+                    document.getElementById('avgPrice').textContent = '--';
+                }
+                
+                document.getElementById('totalTrades').textContent = pos.trades.length;
+            }
+        }
+
+        function updatePnL() {
+            const pos = positions[currentSymbol];
+            const pnlEl = document.getElementById('pnl');
+            
+            if (pos && pos.quantity !== 0 && orderBook.mid_price) {
+                const currentValue = pos.quantity * parseFloat(orderBook.mid_price);
+                const pnl = currentValue - pos.totalCost;
+                
+                pnlEl.textContent = `$${pnl.toFixed(2)}`;
+                pnlEl.className = 'portfolio-value ' + (pnl >= 0 ? 'profit-positive' : 'profit-negative');
+            } else {
+                pnlEl.textContent = '$0.00';
+                pnlEl.className = 'portfolio-value';
+            }
+        }
+
+        // Render Trades and Orders
+        function renderTrades() {
+            const container = document.getElementById('tradesTab');
+            const userId = document.getElementById('userId').value;
+            
+            const userTrades = trades.filter(t => 
+                t.buyer === userId || t.seller === userId
+            ).slice(0, 20);
+            
+            if (userTrades.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No trades yet</div>';
+                return;
+            }
+            
+            container.innerHTML = userTrades.map(trade => {
+                const isBuyer = trade.buyer === userId;
+                const side = isBuyer ? 'BUY' : 'SELL';
+                const sideColor = isBuyer ? '#00ff00' : '#ff4444';
+                
+                return `
+                    <div class="trade-item">
+                        <div class="trade-header">
+                            <span class="trade-symbol">${trade.symbol}</span>
+                            <span class="trade-time">${new Date(trade.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div class="trade-details">
+                            <div><span class="trade-label">Side:</span> <span style="color: ${sideColor}">${side}</span></div>
+                            <div><span class="trade-label">Price:</span> ${parseFloat(trade.price).toFixed(2)}</div>
+                            <div><span class="trade-label">Quantity:</span> ${trade.quantity}</div>
+                            <div><span class="trade-label">Total:</span> $${(parseFloat(trade.price) * trade.quantity).toFixed(2)}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderOrders() {
+            const container = document.getElementById('ordersTab');
+            const userId = document.getElementById('userId').value;
+            
+            const userOrders = orders.filter(o => o.user_id === userId).slice(0, 20);
+            
+            if (userOrders.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">No active orders</div>';
+                return;
+            }
+            
+            container.innerHTML = userOrders.map(order => {
+                const sideColor = order.side === 'BUY' ? '#00ff00' : '#ff4444';
+                
+                return `
+                    <div class="order-item">
+                        <div class="trade-header">
+                            <span class="trade-symbol">${order.symbol}</span>
+                            <span class="trade-time">${new Date(order.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div class="trade-details">
+                            <div><span class="trade-label">Side:</span> <span style="color: ${sideColor}">${order.side}</span></div>
+                            <div><span class="trade-label">Price:</span> ${parseFloat(order.price).toFixed(2)}</div>
+                            <div><span class="trade-label">Quantity:</span> ${order.quantity}</div>
+                            <div><span class="trade-label">Status:</span> OPEN</div>
+                        </div>
+                        <div class="order-actions">
+                            <button class="btn-small btn-danger" onclick="cancelOrder('${order.order_id}')">Cancel</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Utility Functions
+        function setQuantity(amount) {
+            document.getElementById('orderQuantity').value = amount;
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            if (tab === 'trades') {
+                document.getElementById('tradesTab').style.display = 'block';
+                document.getElementById('ordersTab').style.display = 'none';
+            } else {
+                document.getElementById('tradesTab').style.display = 'none';
+                document.getElementById('ordersTab').style.display = 'block';
+            }
+        }
+
+        function showNotification(message, type = 'success') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Auto-refresh order book
+        setInterval(loadOrderBook, 2000);
+    </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_serializer
 from typing import Optional, List
 from decimal import Decimal
@@ -83,6 +84,11 @@ connection_manager = ConnectionManager()
 start_time: Optional[datetime] = None
 background_tasks: List[asyncio.Task] = []
 
+# Configuration - Set these to False to disable
+ENABLE_MARKET_MAKER = False
+ENABLE_NOISE_TRADERS = False
+NUM_NOISE_TRADERS = 3
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -96,27 +102,35 @@ async def lifespan(app: FastAPI):
     # Initialize symbols - TradingEngine creates books on-demand
     # No need to explicitly add symbols
     
-    # Start market maker
-    market_maker = MarketMaker(
-        trading_engine=trading_engine,
-        symbols=["AAPL", "GOOGL", "MSFT"],
-        base_spread=Decimal("0.10"),
-        quantity_range=(10, 100)
-    )
-    market_maker_task = asyncio.create_task(market_maker.run())
-    background_tasks.append(market_maker_task)
-    
-    # Start noise traders
-    for i in range(3):
-        noise_trader = NoiseTrader(
+    # Start market maker (optional)
+    if ENABLE_MARKET_MAKER:
+        market_maker = MarketMaker(
             trading_engine=trading_engine,
             symbols=["AAPL", "GOOGL", "MSFT"],
-            user_id=f"noise_trader_{i}",
-            order_rate=2.0  # 2 orders per second
+            base_spread=Decimal("0.10"),
+            quantity_range=(10, 100)
         )
-        noise_trader_task = asyncio.create_task(noise_trader.run())
-        background_tasks.append(noise_trader_task)
-        noise_traders.append(noise_trader)
+        market_maker_task = asyncio.create_task(market_maker.run())
+        background_tasks.append(market_maker_task)
+        print("Market Maker enabled")
+    else:
+        print("Market Maker disabled")
+    
+    # Start noise traders (optional)
+    if ENABLE_NOISE_TRADERS:
+        for i in range(NUM_NOISE_TRADERS):
+            noise_trader = NoiseTrader(
+                trading_engine=trading_engine,
+                symbols=["AAPL", "GOOGL", "MSFT"],
+                user_id=f"noise_trader_{i}",
+                order_rate=2.0  # 2 orders per second
+            )
+            noise_trader_task = asyncio.create_task(noise_trader.run())
+            background_tasks.append(noise_trader_task)
+            noise_traders.append(noise_trader)
+        print(f"{NUM_NOISE_TRADERS} Noise Traders enabled")
+    else:
+        print("Noise Traders disabled")
     
     # Start event broadcaster
     broadcaster_task = asyncio.create_task(broadcast_events())
@@ -306,6 +320,19 @@ async def get_stats():
     )
 
 
+@app.get("/stats/detailed")
+async def get_detailed_stats():
+    """Get detailed statistics including profiling data"""
+    return trading_engine.get_statistics()
+
+
+@app.get("/stats/profiling")
+async def get_profiling_stats(sort_by: str = "cumulative", top_n: int = 20):
+    """Get detailed profiling report"""
+    report = trading_engine.get_profiling_report(sort_by, top_n)
+    return {"profiling_report": report}
+
+
 @app.websocket("/ws/market")
 async def websocket_market(websocket: WebSocket):
     """WebSocket endpoint for global market data"""
@@ -339,8 +366,37 @@ async def root():
         "name": "Trading Exchange API",
         "version": "1.0.0",
         "status": "running",
-        "docs": "/docs"
+        "docs": "/docs",
+        "trading_ui": "/trading",
+        "market_maker_enabled": ENABLE_MARKET_MAKER,
+        "noise_traders_enabled": ENABLE_NOISE_TRADERS,
+        "num_noise_traders": NUM_NOISE_TRADERS if ENABLE_NOISE_TRADERS else 0
     }
+
+
+@app.get("/config")
+async def get_config():
+    """Get server configuration"""
+    return {
+        "market_maker": {
+            "enabled": ENABLE_MARKET_MAKER,
+            "symbols": ["AAPL", "GOOGL", "MSFT"] if ENABLE_MARKET_MAKER else [],
+            "base_spread": "0.10" if ENABLE_MARKET_MAKER else None,
+            "quantity_range": [10, 100] if ENABLE_MARKET_MAKER else None
+        },
+        "noise_traders": {
+            "enabled": ENABLE_NOISE_TRADERS,
+            "count": NUM_NOISE_TRADERS if ENABLE_NOISE_TRADERS else 0,
+            "symbols": ["AAPL", "GOOGL", "MSFT"] if ENABLE_NOISE_TRADERS else [],
+            "order_rate": 2.0 if ENABLE_NOISE_TRADERS else None
+        }
+    }
+
+
+@app.get("/trading")
+async def trading_ui():
+    """Serve the trading UI"""
+    return FileResponse("api/static/trading.html")
 
 async def trading_event_callback(event_type, data):
     """Callback for trading events"""
