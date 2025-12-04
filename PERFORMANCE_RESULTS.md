@@ -37,6 +37,17 @@ All 9 performance tests passed successfully.
 
 **Result**: ✅ No user experienced unfair latency. All users within 2 standard deviations of mean.
 
+### Latency Under Extreme Load
+
+| Load (orders) | P99 Latency (ms) | Throughput (orders/sec) |
+|---------------|------------------|-------------------------|
+| 100           | 0.0609           | 65,261                  |
+| 500           | 0.0328           | 84,836                  |
+| 1000          | 0.0319           | 81,907                  |
+| 5000          | 0.0323           | 69,476                  |
+
+**Result**: ✅ P99 latency stays under 0.1ms even at 5000 orders. Peak throughput: **84,836 orders/sec**.
+
 ---
 
 ## 2. Fairness Under Load Tests
@@ -54,17 +65,6 @@ All 9 performance tests passed successfully.
 
 **Result**: ✅ Price-time priority correctly maintained. Best bid is always the highest price.
 
-### Latency Under Extreme Load
-
-| Load (orders) | P99 Latency (ms) | Throughput (orders/sec) |
-|---------------|------------------|-------------------------|
-| 100           | 0.0609           | 65,261                  |
-| 500           | 0.0328           | 84,836                  |
-| 1000          | 0.0319           | 81,907                  |
-| 5000          | 0.0323           | 69,476                  |
-
-**Result**: ✅ P99 latency stays under 0.1ms even at 5000 orders. Peak throughput: **84,836 orders/sec**.
-
 ---
 
 ## 3. Deterministic Replay Tests
@@ -72,7 +72,6 @@ All 9 performance tests passed successfully.
 ### Basic Replay Test
 - **Original Trades**: 23
 - **Replayed Trades**: 23
-- **Orders Replayed**: 50
 
 **Result**: ✅ Perfect match - replay produces identical results.
 
