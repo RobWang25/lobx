@@ -393,6 +393,67 @@ async def get_config():
     }
 
 
+@app.post("/config/market-maker/{enabled}")
+async def toggle_market_maker(enabled: bool):
+    """Enable or disable market maker"""
+    global ENABLE_MARKET_MAKER, market_maker, background_tasks
+    
+    if enabled and not ENABLE_MARKET_MAKER:
+        # Start market maker
+        ENABLE_MARKET_MAKER = True
+        market_maker = MarketMaker(
+            trading_engine=trading_engine,
+            symbols=["AAPL", "GOOGL", "MSFT"],
+            base_spread=Decimal("0.10"),
+            quantity_range=(10, 100)
+        )
+        market_maker_task = asyncio.create_task(market_maker.run())
+        background_tasks.append(market_maker_task)
+        return {"status": "enabled", "message": "Market maker started"}
+    
+    elif not enabled and ENABLE_MARKET_MAKER:
+        # Stop market maker
+        ENABLE_MARKET_MAKER = False
+        if market_maker:
+            market_maker.stop()
+            market_maker = None
+        return {"status": "disabled", "message": "Market maker stopped"}
+    
+    return {"status": "no_change", "message": f"Market maker already {'enabled' if enabled else 'disabled'}"}
+
+
+@app.post("/config/noise-traders/{enabled}")
+async def toggle_noise_traders(enabled: bool):
+    """Enable or disable noise traders"""
+    global ENABLE_NOISE_TRADERS, noise_traders, background_tasks
+    
+    if enabled and not ENABLE_NOISE_TRADERS:
+        # Start noise traders
+        ENABLE_NOISE_TRADERS = True
+        noise_traders = []
+        for i in range(NUM_NOISE_TRADERS):
+            noise_trader = NoiseTrader(
+                trading_engine=trading_engine,
+                symbols=["AAPL", "GOOGL", "MSFT"],
+                user_id=f"noise_trader_{i}",
+                order_rate=2.0
+            )
+            noise_trader_task = asyncio.create_task(noise_trader.run())
+            background_tasks.append(noise_trader_task)
+            noise_traders.append(noise_trader)
+        return {"status": "enabled", "message": f"{NUM_NOISE_TRADERS} noise traders started"}
+    
+    elif not enabled and ENABLE_NOISE_TRADERS:
+        # Stop noise traders
+        ENABLE_NOISE_TRADERS = False
+        for trader in noise_traders:
+            trader.stop()
+        noise_traders = []
+        return {"status": "disabled", "message": "Noise traders stopped"}
+    
+    return {"status": "no_change", "message": f"Noise traders already {'enabled' if enabled else 'disabled'}"}
+
+
 @app.get("/trading")
 async def trading_ui():
     """Serve the trading UI"""

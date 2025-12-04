@@ -451,6 +451,10 @@
             .orderbook-container {
                 grid-template-columns: 1fr;
             }
+
+            .settings-panel {
+                display: none;
+            }
         }
 
         @media (max-width: 768px) {
@@ -475,6 +479,10 @@
             .orderbook-container {
                 height: 300px;
                 padding: 10px;
+            }
+
+            .settings-panel {
+                display: none;
             }
         }
 
@@ -510,6 +518,69 @@
         .notification.error {
             border-left-color: #cc0000;
         }
+
+        /* Settings Controls */
+        .settings-panel {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .setting-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .setting-control label {
+            color: #999;
+            cursor: pointer;
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 40px;
+            height: 20px;
+            background: #2a2a2a;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: #0066cc;
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            transition: left 0.3s;
+        }
+
+        .toggle-switch.active::after {
+            left: 22px;
+        }
+
+        .setting-status {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .setting-status.enabled {
+            color: #00ff00;
+        }
+
+        .setting-status.disabled {
+            color: #ff4444;
+        }
     </style>
 </head>
 <body>
@@ -521,6 +592,18 @@
                 <button class="symbol-tab active" data-symbol="AAPL">AAPL</button>
                 <button class="symbol-tab" data-symbol="GOOGL">GOOGL</button>
                 <button class="symbol-tab" data-symbol="MSFT">MSFT</button>
+            </div>
+            <div class="settings-panel">
+                <div class="setting-control">
+                    <label for="marketMakerToggle">Market Maker</label>
+                    <div class="toggle-switch" id="marketMakerToggle" onclick="toggleMarketMaker()"></div>
+                    <span class="setting-status" id="marketMakerStatus">--</span>
+                </div>
+                <div class="setting-control">
+                    <label for="noiseTraderToggle">Noise Traders</label>
+                    <div class="toggle-switch" id="noiseTraderToggle" onclick="toggleNoiseTraders()"></div>
+                    <span class="setting-status" id="noiseTraderStatus">--</span>
+                </div>
             </div>
             <div class="connection-status">
                 <span class="status-dot" id="statusDot"></span>
@@ -655,6 +738,7 @@
             initWebSocket();
             initChart();
             initEventListeners();
+            loadConfig();
             setInterval(updatePnL, 1000);
         });
 
@@ -1153,6 +1237,93 @@
 
         // Auto-refresh order book
         setInterval(loadOrderBook, 2000);
+
+        // Load Configuration
+        async function loadConfig() {
+            try {
+                const response = await fetch('/config');
+                const config = await response.json();
+                
+                updateConfigUI(config);
+            } catch (error) {
+                console.error('Error loading config:', error);
+            }
+        }
+
+        function updateConfigUI(config) {
+            const marketMakerToggle = document.getElementById('marketMakerToggle');
+            const marketMakerStatus = document.getElementById('marketMakerStatus');
+            const noiseTraderToggle = document.getElementById('noiseTraderToggle');
+            const noiseTraderStatus = document.getElementById('noiseTraderStatus');
+            
+            // Market Maker
+            if (config.market_maker.enabled) {
+                marketMakerToggle.classList.add('active');
+                marketMakerStatus.textContent = 'ON';
+                marketMakerStatus.className = 'setting-status enabled';
+            } else {
+                marketMakerToggle.classList.remove('active');
+                marketMakerStatus.textContent = 'OFF';
+                marketMakerStatus.className = 'setting-status disabled';
+            }
+            
+            // Noise Traders
+            if (config.noise_traders.enabled) {
+                noiseTraderToggle.classList.add('active');
+                noiseTraderStatus.textContent = `ON (${config.noise_traders.count})`;
+                noiseTraderStatus.className = 'setting-status enabled';
+            } else {
+                noiseTraderToggle.classList.remove('active');
+                noiseTraderStatus.textContent = 'OFF';
+                noiseTraderStatus.className = 'setting-status disabled';
+            }
+        }
+
+        async function toggleMarketMaker() {
+            const toggle = document.getElementById('marketMakerToggle');
+            const isEnabled = toggle.classList.contains('active');
+            const newState = !isEnabled;
+            
+            try {
+                const response = await fetch(`/config/market-maker/${newState}`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showNotification(result.message, 'success');
+                    await loadConfig();
+                } else {
+                    showNotification('Failed to toggle market maker', 'error');
+                }
+            } catch (error) {
+                console.error('Error toggling market maker:', error);
+                showNotification('Failed to toggle market maker', 'error');
+            }
+        }
+
+        async function toggleNoiseTraders() {
+            const toggle = document.getElementById('noiseTraderToggle');
+            const isEnabled = toggle.classList.contains('active');
+            const newState = !isEnabled;
+            
+            try {
+                const response = await fetch(`/config/noise-traders/${newState}`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    showNotification(result.message, 'success');
+                    await loadConfig();
+                } else {
+                    showNotification('Failed to toggle noise traders', 'error');
+                }
+            } catch (error) {
+                console.error('Error toggling noise traders:', error);
+                showNotification('Failed to toggle noise traders', 'error');
+            }
+        }
     </script>
 </body>
 </html>
