@@ -1,6 +1,6 @@
 # Quick Start Guide - New Features
 
-## 🚀 Getting Started in 60 Seconds
+## Getting Started in 60 Seconds
 
 ### Start the Server
 ```powershell
@@ -16,7 +16,7 @@ $env:PYTHONPATH = "c:\Users\bobwa\Downloads\Masters\python-market-project"
 python demo/test_profiling.py
 ```
 
-## 📊 Key Features
+## Key Features
 
 ### 1. Web Trading UI
 - **URL**: http://localhost:8000/trading
@@ -35,7 +35,7 @@ print(stats['profiler_metrics'])
 engine = TradingEngine(use_async=True)
 ```
 
-## 🎯 Trading UI Quick Guide
+## Trading UI Quick Guide
 
 ### Place an Order
 1. Enter User ID (default: trader_1)
@@ -57,7 +57,7 @@ engine = TradingEngine(use_async=True)
 - Click tabs at top: AAPL, GOOGL, MSFT
 - Each symbol has separate position
 
-## 📈 API Endpoints
+## API Endpoints
 
 ### New Endpoints
 - `GET /trading` - Trading UI
@@ -74,34 +74,6 @@ engine = TradingEngine(use_async=True)
 - `WS /ws/account/{user_id}` - User account WebSocket
 
 ## 🔧 Configuration
-
-### Disable Market Maker or Noise Traders
-
-Edit `api/main.py` and set these flags at the top:
-
-```python
-# Configuration - Set these to False to disable
-ENABLE_MARKET_MAKER = True   # Set to False to disable market maker
-ENABLE_NOISE_TRADERS = True  # Set to False to disable noise traders
-NUM_NOISE_TRADERS = 3        # Number of noise traders (if enabled)
-```
-
-Then restart the server. You'll see confirmation messages:
-```
-✓ Market Maker enabled
-✓ 3 Noise Traders enabled
-```
-
-Or if disabled:
-```
-✗ Market Maker disabled
-✗ Noise Traders disabled
-```
-
-Check current configuration:
-```
-GET http://localhost:8000/config
-```
 
 ### Engine Options
 ```python
@@ -122,13 +94,13 @@ AsyncMatchingEngine(
 )
 ```
 
-## 📱 Mobile Access
+##s Mobile Access
 
 1. Find your IP: `ipconfig` (Windows)
 2. Connect phone to same WiFi
 3. Open: http://YOUR_IP:8000/trading
 
-## 🧪 Testing
+## Testing
 
 ### Test Profiling
 ```powershell
@@ -145,7 +117,7 @@ python demo/test_api_endpoints.py
 python -m pytest tests/ -v
 ```
 
-## 📊 Performance
+## Performance
 
 ### Without Profiling
 - 152,000 orders/sec
@@ -160,20 +132,7 @@ python -m pytest tests/ -v
 - 100,000+ orders/sec
 - Better resource utilization
 
-## 🎨 UI Features
-
-✅ Real-time order book with depth visualization
-✅ Live price charts (Chart.js)
-✅ Position tracking and P&L
-✅ Trade history
-✅ Order management (submit/cancel)
-✅ Multi-symbol support
-✅ Mobile responsive
-✅ WebSocket real-time updates
-✅ One-click trading
-✅ Market and limit orders
-
-## 📚 Documentation
+## Documentation
 
 - `WEEK8_UPDATES.md` - Complete feature guide
 - `IMPLEMENTATION_SUMMARY.md` - What was built
@@ -181,7 +140,7 @@ python -m pytest tests/ -v
 - `websockets_guide.md` - WebSocket usage
 - `PERFORMANCE_RESULTS.md` - Performance tests
 
-## 🆘 Quick Troubleshooting
+## Quick Troubleshooting
 
 **UI not loading?**
 - Check server is running
@@ -200,7 +159,7 @@ python -m pytest tests/ -v
 - Enable with `enable_profiling=True`
 - Check `/stats/detailed` endpoint
 
-## ✨ What's New
+## What's New
 
 ### Performance
 - cProfile integration
@@ -225,6 +184,6 @@ python -m pytest tests/ -v
 
 ---
 
-**Ready to trade!** 🚀
+**Ready to trade!** 
 
 Start server → Open /trading → Place orders → Watch P&L grow!

@@ -6,6 +6,11 @@ Comprehensive performance tests for concurrent users, fairness under load, and d
 
 All 9 performance tests passed successfully.
 
+Run the tests with:
+```powershell
+pytest tests/test_performance.py -v -s
+```
+
 ---
 
 ## 1. Concurrent User Latency Tests
