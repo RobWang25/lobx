@@ -4,6 +4,7 @@ Tests invariants that should always hold.
 """
 import pytest
 from hypothesis import given, strategies as st, assume, settings
+from dataclasses import replace
 from decimal import Decimal
 from datetime import datetime
 
@@ -109,9 +110,9 @@ class TestOrderBookInvariants:
         # Every order in index should be in a price level
         for order_id, order in book.order_index.items():
             if order.side == Side.BUY:
-                assert order in book.bids[order.price]
+                assert book.bids[order.price][order_id] == order
             else:
-                assert order in book.asks[order.price]
+                assert book.asks[order.price][order_id] == order
     
     @given(
         orders=st.lists(order_strategy(), min_size=5, max_size=20),
@@ -481,45 +482,59 @@ class TestMatchingInvariants:
         """Matching should never violate FIFO within a price level."""
         book = OrderBook("TEST")
         matcher = MatchingEngine()
-        
+        arrival = {}
+
         # Add sell orders first to create resting orders
         for order in sell_orders:
-            if order.side == Side.SELL:
-                book.add_order(order)
-        
-        # Now add buy orders and match
+            if order.side == Side.SELL and book.add_order(order):
+                arrival[order.order_id] = len(arrival)
+
+        # Now add buy orders and match. Fills at a price must follow arrival
+        # order, so the arrival index at each price can never go backwards.
+        last_arrival_at_price = {}
         for order in buy_orders:
             if order.side == Side.BUY:
                 trades, remaining = matcher.match_order(order, book)
-                
-                # All trades should be valid
+
                 for trade in trades:
                     assert trade.quantity > 0
                     assert trade.price > 0
-    
+
+                    resting_arrival = arrival[trade.sell_order_id]
+                    assert resting_arrival >= last_arrival_at_price.get(trade.price, 0)
+                    last_arrival_at_price[trade.price] = resting_arrival
+
     @given(orders=st.lists(order_strategy(), min_size=2, max_size=30))
     @settings(max_examples=50)
     def test_total_volume_conserved(self, orders):
         """Total volume should be conserved through matching."""
         engine = TradingEngine(enable_logging=False)
-        
+
+        # Unique IDs and users, so duplicate rejection and self-trade prevention
+        # can't legitimately remove volume from this test.
+        orders = [
+            replace(order, order_id=f"O{index}", user_id=f"u{index}")
+            for index, order in enumerate(orders)
+        ]
         initial_buy_volume = sum(o.quantity for o in orders if o.side == Side.BUY)
         initial_sell_volume = sum(o.quantity for o in orders if o.side == Side.SELL)
-        
+
         # Submit all orders
+        traded_volume = 0
         for order in orders:
-            engine.submit_order(order)
-        
+            traded_volume += sum(trade.quantity for trade in engine.submit_order(order))
+
         # Check that volume is conserved
         stats = engine.get_statistics()
         book_stats = stats["books"].get("TEST", {})
-        
+
         remaining_buy = book_stats.get("total_bid_quantity", 0)
         remaining_sell = book_stats.get("total_ask_quantity", 0)
-        
-        # Traded volume should match on both sides
-        assert stats["total_trades_executed"] >= 0
-    
+
+        # Every share submitted either traded or is still resting
+        assert initial_buy_volume == traded_volume + remaining_buy
+        assert initial_sell_volume == traded_volume + remaining_sell
+
     @given(orders=st.lists(order_strategy(), min_size=1, max_size=30))
     @settings(max_examples=50)
     def test_no_negative_quantities(self, orders):

@@ -178,7 +178,7 @@ class TestOrderCancellation:
         assert Decimal("100.00") in book.bids
         # Only order2 should remain
         assert len(book.bids[Decimal("100.00")]) == 1
-        assert book.bids[Decimal("100.00")][0].order_id == order2.order_id
+        assert book.get_orders_at_price(Side.BUY, Decimal("100.00")) == [order2]
 
 
 class TestFIFOOrdering:

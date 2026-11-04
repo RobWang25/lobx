@@ -225,10 +225,17 @@ class TestFairnessUnderLoad:
         print(f"  Orders submitted: {len(order_ids)}")
         print(f"  Trades executed: {len(trades)}")
         
-        # Note: Due to threading, exact FIFO across threads isn't guaranteed,
-        # but within each thread's batch it should be preserved
-        # This test mainly ensures no crashes and reasonable behavior
-    
+        # Exact FIFO across threads isn't guaranteed, because thread scheduling
+        # decides arrival order. Each thread submits in sequence, though, so its
+        # own orders must fill in the order it sent them.
+        assert len(trades) == len(order_ids)
+        filled_ids = [trade.buy_order_id for trade in trades]
+        for batch_id in range(10):
+            batch_prefix = f"BUY-{batch_id}-"
+            batch_fills = [oid for oid in filled_ids if oid.startswith(batch_prefix)]
+            expected = [f"{batch_prefix}{i}" for i in range(num_orders_per_price // 10)]
+            assert batch_fills == expected
+
     def test_price_time_priority_under_load(self):
         """Verify price-time priority is maintained under load."""
         engine = TradingEngine(enable_logging=False)

@@ -1,0 +1,77 @@
+{
+  "python": "3.14.2",
+  "machine": "Apple M3 Pro",
+  "lobx_source_sha256": "609e14fa7f96976c7447087746cc71e89e5778cdb030a6b25517eec428e13116",
+  "repeats": 1,
+  "workloads": {
+    "deep_book": {
+      "logging_off": {
+        "ops_per_sec": 1258,
+        "seconds": 158.995,
+        "latency_us": {
+          "p50": 177.71,
+          "p90": 864.58,
+          "p99": 21625.71,
+          "p999": 25847.08,
+          "max": 56841.75
+        },
+        "trades": 34510,
+        "traded_quantity": 878872,
+        "cancels": 23804,
+        "cancel_hits": 18459,
+        "resting_orders": 122718,
+        "resting_levels": 30836,
+        "result_sha256": "cdbe734a196da8a24e0ae4fdc87cc4dd2f9350fb7ac7312bdd9429f5c50e7c2b",
+        "all_ops_per_sec": [
+          1258
+        ]
+      }
+    },
+    "mixed": {
+      "logging_off": {
+        "ops_per_sec": 89242,
+        "seconds": 2.241,
+        "latency_us": {
+          "p50": 11.33,
+          "p90": 21.83,
+          "p99": 34.58,
+          "p999": 44.71,
+          "max": 18108.21
+        },
+        "trades": 131825,
+        "traded_quantity": 3358433,
+        "cancels": 29795,
+        "cancel_hits": 5419,
+        "resting_orders": 31313,
+        "resting_levels": 503,
+        "result_sha256": "13c1c169c4e104394526a642809bb4aab864bb41ec01ba937ec703457f6ebf18",
+        "all_ops_per_sec": [
+          89242
+        ]
+      }
+    },
+    "cancel_heavy": {
+      "logging_off": {
+        "ops_per_sec": 159695,
+        "seconds": 1.252,
+        "latency_us": {
+          "p50": 2.17,
+          "p90": 15.62,
+          "p99": 20.96,
+          "p999": 24.21,
+          "max": 9811.12
+        },
+        "trades": 13759,
+        "traded_quantity": 249475,
+        "cancels": 91719,
+        "cancel_hits": 87942,
+        "resting_orders": 6419,
+        "resting_levels": 20,
+        "result_sha256": "58717ae9d24678e8c92dbcec571c015d7f0578df2dc05190441f6996e5f90782",
+        "all_ops_per_sec": [
+          159695
+        ]
+      }
+    }
+  }
+}

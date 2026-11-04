@@ -1,6 +1,6 @@
 """
 LOBX - Limit Order Book Exchange
-High-performance trading engine with O(1) operations.
+In-memory trading engine with price-time priority.
 """
 
 from .models import Order, Trade, Side, OrderStatus, generate_order_id, generate_trade_id
