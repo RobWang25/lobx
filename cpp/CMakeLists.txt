@@ -1,4 +1,4 @@
-# The C++ matching core, its tests and a workload replay tool.
+# The C++ matching core, its tests, a workload replay tool and the Python module.
 #
 # Checked build, with memory and undefined-behaviour checks:
 #   cmake -S cpp -B build/cpp-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLOBX_SANITIZE=ON
@@ -8,6 +8,10 @@
 # Optimized build, for speed:
 #   cmake -S cpp -B build/cpp-release -G Ninja -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build/cpp-release
+#
+# The Python module isn't built here. pip builds it through pyproject.toml, which
+# runs this file with SKBUILD set:
+#   .venv2/bin/python -m pip install --no-build-isolation -e .
 
 cmake_minimum_required(VERSION 3.25)
 project(lobx_cpp CXX)
@@ -44,14 +48,7 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
   SYSTEM
 )
-FetchContent_Declare(
-  Catch2
-  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG v3.7.1
-  GIT_SHALLOW TRUE
-  SYSTEM
-)
-FetchContent_MakeAvailable(unordered_dense Catch2)
+FetchContent_MakeAvailable(unordered_dense)
 
 # The core is header-only, so this library has nothing to compile. Linking to it
 # passes on its include path and its dependency.
@@ -60,6 +57,29 @@ target_include_directories(lobx_core INTERFACE include)
 target_link_libraries(lobx_core INTERFACE unordered_dense::unordered_dense)
 
 set(LOBX_WARNINGS -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+
+# SKBUILD is set when pip builds the package. Then we only need the Python module.
+if(SKBUILD)
+  find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+  find_package(nanobind CONFIG REQUIRED)
+
+  # Builds lobx/_core.<platform>.so. NB_STATIC links nanobind's own support code
+  # into the module instead of shipping it as a separate library.
+  nanobind_add_module(_core NB_STATIC bindings/module.cpp)
+  target_link_libraries(_core PRIVATE lobx_core)
+  target_compile_options(_core PRIVATE ${LOBX_WARNINGS})
+  install(TARGETS _core LIBRARY DESTINATION lobx)
+  return()
+endif()
+
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG v3.7.1
+  GIT_SHALLOW TRUE
+  SYSTEM
+)
+FetchContent_MakeAvailable(Catch2)
 
 add_executable(lobx_tests
   tests/test_order_book.cpp

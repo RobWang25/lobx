@@ -16,3 +16,4 @@ dist/
 .idea/
 
 *.log
+docs/internal/
