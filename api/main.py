@@ -142,6 +142,10 @@ async def lifespan(app: FastAPI):
     for task in background_tasks:
         task.cancel()
     await asyncio.gather(*background_tasks, return_exceptions=True)
+    # Empty the lists, so a later startup in the same process doesn't wait on tasks
+    # from this one's closed event loop.
+    background_tasks.clear()
+    noise_traders.clear()
 
 
 app = FastAPI(
@@ -253,28 +257,15 @@ async def get_order_book(symbol: str, depth: int = 10):
         if not book:
             raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
         
-        # Aggregate by price level
-        bid_levels = {}
-        for price, orders in book.bids.items():
-            total_qty = sum(o.quantity for o in orders.values())
-            bid_levels[price] = BookLevel(
-                price=price,
-                quantity=Decimal(total_qty),
-                order_count=len(orders)
-            )
-        
-        ask_levels = {}
-        for price, orders in book.asks.items():
-            total_qty = sum(o.quantity for o in orders.values())
-            ask_levels[price] = BookLevel(
-                price=price,
-                quantity=Decimal(total_qty),
-                order_count=len(orders)
-            )
-        
-        # Sort and limit depth
-        sorted_bids = sorted(bid_levels.values(), key=lambda x: x.price, reverse=True)[:depth]
-        sorted_asks = sorted(ask_levels.values(), key=lambda x: x.price)[:depth]
+        # Best price first on each side, already limited to `depth` levels
+        sorted_bids = [
+            BookLevel(price=price, quantity=Decimal(quantity), order_count=count)
+            for price, quantity, count in book.get_levels(Side.BUY, depth)
+        ]
+        sorted_asks = [
+            BookLevel(price=price, quantity=Decimal(quantity), order_count=count)
+            for price, quantity, count in book.get_levels(Side.SELL, depth)
+        ]
         
         # Calculate spread and mid price
         spread = None

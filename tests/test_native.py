@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from hypothesis import given, settings, strategies as st
 
-from lobx._native import AVAILABLE, IdMap, price_to_units, units_to_price
+from lobx._native import AVAILABLE, IdMap, _core, price_to_units, units_to_price
 from lobx.models import Side
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bench"))
@@ -53,7 +53,7 @@ class TestIdMap:
 
 @pytest.fixture
 def core():
-    return differential._core
+    return _core
 
 
 # A fixture rather than an attribute on self: pytest keeps test objects alive until

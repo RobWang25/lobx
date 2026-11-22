@@ -79,9 +79,13 @@ TradingEngine(
     enable_logging=True,      # Event logging
     event_callback=None,      # Async event callback
     use_async=False,          # Leave off: async matching doesn't work
-    enable_profiling=False    # Performance profiling
+    enable_profiling=False,   # Performance profiling
+    backend=None,             # "python" or "cpp", defaults to LOBX_BACKEND, then "python"
+    self_trade_prevention=True
 )
 ```
+
+The `cpp` backend needs a one-time build on Python 3.10 or newer: `python -m pip install -e .`. See the README's C++ Backend section.
 
 ##s Mobile Access
 

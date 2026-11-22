@@ -7,13 +7,63 @@ like a queue, and it can also delete any order by ID without scanning.
 """
 from collections import OrderedDict, defaultdict
 from decimal import Decimal
-from typing import Optional, Dict, List, Set
+from typing import Optional, Dict, List, Set, Tuple
 import heapq
 
 from .models import Order, Side, OrderStatus
 
 
-class OrderBook:
+class BookQueries:
+    """
+    Read-only queries shared by OrderBook and the C++-backed NativeOrderBook.
+
+    A subclass provides symbol, get_best_bid, get_best_ask and get_levels.
+    """
+
+    def get_spread(self) -> Optional[Decimal]:
+        """Get bid-ask spread."""
+        bid = self.get_best_bid()
+        ask = self.get_best_ask()
+        if bid is not None and ask is not None:
+            return ask - bid
+        return None
+
+    def get_midprice(self) -> Optional[Decimal]:
+        """Get mid price."""
+        bid = self.get_best_bid()
+        ask = self.get_best_ask()
+        if bid is not None and ask is not None:
+            return (bid + ask) / 2
+        return None
+
+    def get_book_depth(self, levels: int = 5) -> dict:
+        """
+        Get book depth for top N levels.
+
+        Args:
+            levels: Number of price levels to include
+
+        Returns:
+            Dictionary with bids and asks
+        """
+        def to_dicts(side):
+            return [
+                {"price": float(price), "quantity": quantity, "orders": count}
+                for price, quantity, count in self.get_levels(side, levels)
+            ]
+
+        spread = self.get_spread()
+        midprice = self.get_midprice()
+        return {
+            "symbol": self.symbol,
+            "bids": to_dicts(Side.BUY),
+            "asks": to_dicts(Side.SELL),
+            "spread": float(spread) if spread else None,
+            "midprice": float(midprice) if midprice else None
+        }
+
+
+class OrderBook(BookQueries):
     """
     Limit order book for a single symbol.
     
@@ -118,6 +168,10 @@ class OrderBook:
     def get_order(self, order_id: str) -> Optional[Order]:
         """Get order by ID. O(1) lookup."""
         return self.order_index.get(order_id)
+
+    def has_order(self, order_id: str) -> bool:
+        """Whether an order with this ID is resting in the book."""
+        return order_id in self.order_index
     
     def get_best_bid(self) -> Optional[Decimal]:
         """
@@ -153,72 +207,21 @@ class OrderBook:
             self._ask_prices_in_heap.discard(best)
         return None
     
-    def get_spread(self) -> Optional[Decimal]:
-        """Get bid-ask spread."""
-        bid = self.get_best_bid()
-        ask = self.get_best_ask()
-        if bid is not None and ask is not None:
-            return ask - bid
-        return None
-    
-    def get_midprice(self) -> Optional[Decimal]:
-        """Get mid price."""
-        bid = self.get_best_bid()
-        ask = self.get_best_ask()
-        if bid is not None and ask is not None:
-            return (bid + ask) / 2
-        return None
-    
-    def get_book_depth(self, levels: int = 5) -> dict:
+    def get_levels(self, side: Side, depth: Optional[int] = None) -> List[Tuple[Decimal, int, int]]:
         """
-        Get book depth for top N levels.
-        
+        Get (price, total quantity, order count) for each price, best price first.
+
         Args:
-            levels: Number of price levels to include
-            
-        Returns:
-            Dictionary with bids and asks
+            side: BUY or SELL
+            depth: Maximum number of levels, or None for all of them
         """
-        bids = []
-        asks = []
-        
-        # Get top bid levels
-        bid_prices_sorted = sorted(
-            [p for p in self.bids.keys() if self.bids[p]],
-            reverse=True
-        )[:levels]
-        
-        for price in bid_prices_sorted:
-            total_qty = sum(o.quantity for o in self.bids[price].values())
-            num_orders = len(self.bids[price])
-            bids.append({
-                "price": float(price),
-                "quantity": total_qty,
-                "orders": num_orders
-            })
-        
-        # Get top ask levels
-        ask_prices_sorted = sorted(
-            [p for p in self.asks.keys() if self.asks[p]]
-        )[:levels]
-        
-        for price in ask_prices_sorted:
-            total_qty = sum(o.quantity for o in self.asks[price].values())
-            num_orders = len(self.asks[price])
-            asks.append({
-                "price": float(price),
-                "quantity": total_qty,
-                "orders": num_orders
-            })
-        
-        return {
-            "symbol": self.symbol,
-            "bids": bids,
-            "asks": asks,
-            "spread": float(self.get_spread()) if self.get_spread() else None,
-            "midprice": float(self.get_midprice()) if self.get_midprice() else None
-        }
-    
+        levels = self.bids if side == Side.BUY else self.asks
+        prices = sorted((p for p, queue in levels.items() if queue), reverse=side == Side.BUY)
+        return [
+            (price, sum(o.quantity for o in levels[price].values()), len(levels[price]))
+            for price in prices[:depth]
+        ]
+
     def get_orders_at_price(self, side: Side, price: Decimal) -> List[Order]:
         """Get all orders at a specific price level."""
         queue = self.bids[price] if side == Side.BUY else self.asks[price]
