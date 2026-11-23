@@ -1,7 +1,6 @@
 import asyncio
 import random
 from decimal import Decimal
-from typing import List, Tuple
 from datetime import datetime
 
 from lobx.engine import TradingEngine
@@ -17,9 +16,9 @@ class MarketMaker:
     def __init__(
         self,
         trading_engine: TradingEngine,
-        symbols: List[str],
+        symbols: list[str],
         base_spread: Decimal = Decimal("0.10"),
-        quantity_range: Tuple[int, int] = (10, 100),
+        quantity_range: tuple[int, int] = (10, 100),
         update_interval: float = 1.0,
         min_orders_per_side: int = 3
     ):
@@ -65,7 +64,7 @@ class MarketMaker:
         """Calculate spread based on volatility"""
         return self.base_spread * self.volatility_multiplier
     
-    def generate_price_levels(self, mid_price: Decimal, spread: Decimal, count: int) -> List[Decimal]:
+    def generate_price_levels(self, mid_price: Decimal, spread: Decimal, count: int) -> list[Decimal]:
         """Generate price levels for bid or ask side"""
         levels = []
         for i in range(count):

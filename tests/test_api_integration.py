@@ -3,7 +3,6 @@ Test suite for FastAPI integration with lobx trading engine.
 Tests the actual API with proper lifespan handling.
 """
 import pytest
-from decimal import Decimal
 from fastapi.testclient import TestClient
 import sys
 import os

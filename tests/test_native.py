@@ -2,7 +2,7 @@
 Tests for the C++ core (lobx._core) and its Python conversions.
 
 The core is optional, so its tests are skipped unless the package has been built:
-    .venv2/bin/python -m pip install --no-build-isolation -e .
+    .venv/bin/python -m pip install --no-build-isolation -e .
 """
 import random
 import sys

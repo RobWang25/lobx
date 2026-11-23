@@ -111,11 +111,11 @@ cmake --build build/cpp-release
 ```
 
 ```bash
-.venv2/bin/python bench/bench_layers.py --label my-run
+.venv/bin/python bench/bench_layers.py --label my-run
 ```
 
 ```bash
-LOBX_BACKEND=cpp .venv2/bin/python bench/run_baseline.py --label my-cpp-run
+LOBX_BACKEND=cpp .venv/bin/python bench/run_baseline.py --label my-cpp-run
 ```
 
 ```bash
@@ -141,6 +141,8 @@ Logging is on by default in `TradingEngine`, and the API runs with it on.
 | `cancel_heavy` | 344,606 | 2.08 µs | 19.88 µs | 174,392 | 14,565 |
 
 ### Python 3.9.6
+
+Measured before the project moved to Python 3.14, and kept for comparison.
 
 | Workload | Ops/sec, logging off | p50 | p99 | Ops/sec, logging on | Trades |
 |----------|---------------------:|----:|----:|--------------------:|-------:|
@@ -210,11 +212,11 @@ Only compare numbers measured in the same session. The same `deque` engine ran `
 ### Reproducing
 
 ```bash
-.venv2/bin/python bench/generate_workloads.py
+.venv/bin/python bench/generate_workloads.py
 ```
 
 ```bash
-.venv2/bin/python bench/run_baseline.py --label my-run
+.venv/bin/python bench/run_baseline.py --label my-run
 ```
 
 ---

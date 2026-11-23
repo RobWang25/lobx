@@ -8,10 +8,9 @@ import statistics
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 from datetime import datetime
-from typing import List, Tuple, Dict
 
 from lobx.engine import TradingEngine
-from lobx.models import Order, Side, generate_order_id, Trade
+from lobx.models import Order, Side, generate_order_id
 from lobx.replay import EventReplayer
 
 
@@ -56,7 +55,7 @@ class TestConcurrentUserLatency:
         num_users = 10
         orders_per_user = 50
         
-        def submit_orders_for_user(user_id: str) -> List[float]:
+        def submit_orders_for_user(user_id: str) -> list[float]:
             """Submit orders for a single user and return latencies."""
             latencies = []
             random.seed(user_id)  # Different seed per user
@@ -108,7 +107,7 @@ class TestConcurrentUserLatency:
         num_users = 5
         orders_per_user = 100
         
-        def submit_and_measure(user_id: str) -> Dict:
+        def submit_and_measure(user_id: str) -> dict:
             """Submit orders and return per-user statistics."""
             latencies = []
             random.seed(int(user_id.replace("user", "")))
@@ -178,7 +177,7 @@ class TestFairnessUnderLoad:
         # Submit buy orders at same price from multiple threads
         order_ids = []
         
-        def submit_buy_orders(batch_id: int) -> List[str]:
+        def submit_buy_orders(batch_id: int) -> list[str]:
             """Submit a batch of buy orders."""
             batch_order_ids = []
             for i in range(num_orders_per_price // 10):

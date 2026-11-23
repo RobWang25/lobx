@@ -3,8 +3,6 @@ Main trading engine coordinating order books and matching.
 """
 import asyncio
 import os
-from typing import Dict, List, Optional, Union
-from datetime import datetime
 from threading import Lock
 import time
 
@@ -21,7 +19,7 @@ from .profiler import PerformanceProfiler, LatencyTracker
 BACKENDS = ("python", "cpp")
 
 
-def resolve_backend(backend: Optional[str] = None) -> str:
+def resolve_backend(backend: str | None = None) -> str:
     """
     Pick the matching backend: the argument if given, else LOBX_BACKEND, else python.
 
@@ -54,7 +52,7 @@ class TradingEngine:
         event_callback=None,
         use_async: bool = False,
         enable_profiling: bool = False,
-        backend: Optional[str] = None,
+        backend: str | None = None,
         self_trade_prevention: bool = True,
     ):
         """
@@ -74,7 +72,7 @@ class TradingEngine:
         if self.backend == "cpp" and use_async:
             raise ValueError("The async matching engine only works with the python backend")
         self.self_trade_prevention = self_trade_prevention
-        self.books: Dict[str, Union[OrderBook, NativeOrderBook]] = {}
+        self.books: dict[str, OrderBook | NativeOrderBook] = {}
         self.use_async = use_async
 
         # Submits and cancels run one at a time. Matching reads the best order and
@@ -109,7 +107,7 @@ class TradingEngine:
 
         self.event_callback = event_callback
     
-    def submit_order(self, order: Order) -> List[Trade]:
+    def submit_order(self, order: Order) -> list[Trade]:
         """
         Submit order to the exchange.
         
@@ -136,7 +134,7 @@ class TradingEngine:
             else:
                 return self._submit_order_impl(order, start_time)
     
-    def _submit_order_impl(self, order: Order, start_time: float) -> List[Trade]:
+    def _submit_order_impl(self, order: Order, start_time: float) -> list[Trade]:
         """Internal submit order implementation"""
         # Get or create book
         if order.symbol not in self.books:
@@ -226,16 +224,16 @@ class TradingEngine:
             return NativeOrderBook(symbol, self.self_trade_prevention)
         return OrderBook(symbol)
 
-    def get_book(self, symbol: str) -> Optional[Union[OrderBook, NativeOrderBook]]:
+    def get_book(self, symbol: str) -> OrderBook | NativeOrderBook | None:
         """Get order book for symbol."""
         return self.books.get(symbol)
     
-    def get_book_depth(self, symbol: str, levels: int = 5) -> Optional[dict]:
+    def get_book_depth(self, symbol: str, levels: int = 5) -> dict | None:
         """Get book depth for symbol."""
         book = self.get_book(symbol)
         return book.get_book_depth(levels) if book else None
     
-    def get_order(self, order_id: str, symbol: str) -> Optional[Order]:
+    def get_order(self, order_id: str, symbol: str) -> Order | None:
         """Get order by ID."""
         book = self.get_book(symbol)
         return book.get_order(order_id) if book else None
@@ -320,7 +318,7 @@ class TradingEngine:
         self.start_time = time.time()
         self.latencies = []
     
-    def get_event_log(self) -> Optional[List]:
+    def get_event_log(self) -> list | None:
         """Get event log for replay."""
         if self.event_logger:
             return self.event_logger.get_events()

@@ -2,7 +2,6 @@
 Event logging and deterministic replay system.
 """
 import json
-from typing import List, Optional
 from datetime import datetime
 
 from .models import Event, EventType, Order, Trade
@@ -17,7 +16,7 @@ class EventLogger:
     """
     
     def __init__(self):
-        self.events: List[Event] = []
+        self.events: list[Event] = []
         self.sequence = 0
     
     def _log_event(self, event_type: EventType, payload: dict):
@@ -61,7 +60,7 @@ class EventLogger:
             trade.to_dict()
         )
     
-    def get_events(self) -> List[Event]:
+    def get_events(self) -> list[Event]:
         """Get all logged events."""
         return self.events.copy()
     
@@ -77,7 +76,7 @@ class EventLogger:
                 f.write(json.dumps(event.to_dict()) + '\n')
     
     @staticmethod
-    def load_from_file(filepath: str) -> List[Event]:
+    def load_from_file(filepath: str) -> list[Event]:
         """
         Load events from JSON Lines file.
         
@@ -118,7 +117,7 @@ class EventReplayer:
         return EventReplayer.replay_events(events, engine)
     
     @staticmethod
-    def replay_events(events: List[Event], engine) -> dict:
+    def replay_events(events: list[Event], engine) -> dict:
         """
         Replay list of events.
         

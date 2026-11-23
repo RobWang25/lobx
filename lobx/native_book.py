@@ -14,7 +14,6 @@ Differences from the Python backend:
 """
 from collections import OrderedDict
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
 
 from .book import BookQueries
 from .models import Order, OrderStatus, Side, Trade, build_trusted
@@ -32,7 +31,7 @@ _REJECTED = (
     (_core.SubmitStatus.REJECTED_INVALID, _core.SubmitStatus.REJECTED_DUPLICATE) if AVAILABLE else ()
 )
 BUILD_HINT = (
-    "The C++ backend isn't built. On Python 3.10 or newer, run: "
+    "The C++ backend isn't built. Run: "
     "python -m pip install --no-build-isolation -e ."
 )
 _ALL_LEVELS = 2**62
@@ -55,22 +54,22 @@ class NativeOrderBook(BookQueries):
 
         # Order IDs for resting orders only, so memory doesn't grow with every
         # order ever submitted. Numbers are never reused.
-        self._numbers: Dict[str, int] = {}
-        self._names: Dict[int, str] = {}
+        self._numbers: dict[str, int] = {}
+        self._names: dict[int, str] = {}
         self._next_number = 0
 
         self._users = IdMap()
         # The first Decimal seen for each price, so prices come back exactly as
         # they went in (Decimal("150.00"), not Decimal("150.0000")).
-        self._prices: Dict[int, Decimal] = {}
+        self._prices: dict[int, Decimal] = {}
         # Each Decimal price's units, so a price is only converted the first time.
         # Equal Decimals share an entry: Decimal("150.0") finds Decimal("150.00").
-        self._units: Dict[Decimal, int] = {}
+        self._units: dict[Decimal, int] = {}
         self._trade_prefix = f"TRD-{symbol}-"
 
     # ---- Matching ----
 
-    def submit(self, order: Order) -> List[Trade]:
+    def submit(self, order: Order) -> list[Trade]:
         """
         Match an order against the book and rest whatever is left.
 
@@ -137,7 +136,7 @@ class NativeOrderBook(BookQueries):
 
     # ---- Orders ----
 
-    def cancel_order(self, order_id: str) -> Optional[Order]:
+    def cancel_order(self, order_id: str) -> Order | None:
         """Cancel an order by ID. Returns it with status CANCELLED, or None if it isn't resting."""
         number = self._numbers.get(order_id)
         if number is None:
@@ -150,22 +149,22 @@ class NativeOrderBook(BookQueries):
     def has_order(self, order_id: str) -> bool:
         return order_id in self._numbers
 
-    def get_order(self, order_id: str) -> Optional[Order]:
+    def get_order(self, order_id: str) -> Order | None:
         number = self._numbers.get(order_id)
         return None if number is None else self._order(self._book.find(number))
 
-    def get_orders_at_price(self, side: Side, price: Decimal) -> List[Order]:
+    def get_orders_at_price(self, side: Side, price: Decimal) -> list[Order]:
         try:
             units = price_to_units(price)
         except ValueError:
             return []  # No order can rest at a price the core can't represent
         return [self._order(view) for view in self._book.orders_at(self._sides[side], units)]
 
-    def peek_best_order(self, side: Side) -> Optional[Order]:
+    def peek_best_order(self, side: Side) -> Order | None:
         view = self._book.peek_best(self._sides[side])
         return None if view is None else self._order(view)
 
-    def _order(self, view, status: Optional[OrderStatus] = None) -> Order:
+    def _order(self, view, status: OrderStatus | None = None) -> Order:
         """Build an Order from a core OrderView, with its status if none is given."""
         if status is None:
             status = OrderStatus.PARTIAL if view.partially_filled else OrderStatus.OPEN
@@ -183,15 +182,15 @@ class NativeOrderBook(BookQueries):
 
     # ---- Prices and levels ----
 
-    def get_best_bid(self) -> Optional[Decimal]:
+    def get_best_bid(self) -> Decimal | None:
         units = self._book.best_bid()
         return None if units is None else self._prices[units]
 
-    def get_best_ask(self) -> Optional[Decimal]:
+    def get_best_ask(self) -> Decimal | None:
         units = self._book.best_ask()
         return None if units is None else self._prices[units]
 
-    def get_levels(self, side: Side, depth: Optional[int] = None) -> List[Tuple[Decimal, int, int]]:
+    def get_levels(self, side: Side, depth: int | None = None) -> list[tuple[Decimal, int, int]]:
         """Get (price, total quantity, order count) for each price, best price first."""
         levels = self._book.depth(self._sides[side], _ALL_LEVELS if depth is None else depth)
         return [(self._prices[level.price], level.quantity, level.order_count) for level in levels]
@@ -221,17 +220,17 @@ class NativeOrderBook(BookQueries):
     # ---- Read-only snapshots, shaped like OrderBook's attributes ----
 
     @property
-    def bids(self) -> Dict[Decimal, "OrderedDict[str, Order]"]:
+    def bids(self) -> dict[Decimal, "OrderedDict[str, Order]"]:
         """A copy of the bids: price -> OrderedDict of order_id -> Order, in queue order."""
         return self._snapshot(Side.BUY)
 
     @property
-    def asks(self) -> Dict[Decimal, "OrderedDict[str, Order]"]:
+    def asks(self) -> dict[Decimal, "OrderedDict[str, Order]"]:
         """A copy of the asks: price -> OrderedDict of order_id -> Order, in queue order."""
         return self._snapshot(Side.SELL)
 
     @property
-    def order_index(self) -> Dict[str, Order]:
+    def order_index(self) -> dict[str, Order]:
         """A copy of every resting order, by ID."""
         return {
             order.order_id: order
@@ -240,7 +239,7 @@ class NativeOrderBook(BookQueries):
             for order in queue.values()
         }
 
-    def _snapshot(self, side: Side) -> Dict[Decimal, "OrderedDict[str, Order]"]:
+    def _snapshot(self, side: Side) -> dict[Decimal, "OrderedDict[str, Order]"]:
         return {
             price: OrderedDict((o.order_id, o) for o in self.get_orders_at_price(side, price))
             for price, _, _ in self.get_levels(side)

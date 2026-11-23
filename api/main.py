@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, field_serializer
-from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime
 import asyncio
@@ -54,13 +53,13 @@ class BookLevel(BaseModel):
 
 class OrderBookResponse(BaseModel):
     symbol: str
-    bids: List[BookLevel]
-    asks: List[BookLevel]
-    spread: Optional[Decimal]
-    mid_price: Optional[Decimal]
+    bids: list[BookLevel]
+    asks: list[BookLevel]
+    spread: Decimal | None
+    mid_price: Decimal | None
     
     @field_serializer('spread', 'mid_price')
-    def serialize_decimal(self, value: Optional[Decimal]) -> Optional[str]:
+    def serialize_decimal(self, value: Decimal | None) -> str | None:
         return str(value) if value is not None else None
 
 
@@ -68,7 +67,7 @@ class StatsResponse(BaseModel):
     total_orders: int
     total_trades: int
     total_volume: Decimal
-    symbols: List[str]
+    symbols: list[str]
     uptime_seconds: float
     
     @field_serializer('total_volume')
@@ -77,12 +76,12 @@ class StatsResponse(BaseModel):
 
 
 # Global state
-trading_engine: Optional[TradingEngine] = None
-market_maker: Optional[MarketMaker] = None
-noise_traders: List[NoiseTrader] = []
+trading_engine: TradingEngine | None = None
+market_maker: MarketMaker | None = None
+noise_traders: list[NoiseTrader] = []
 connection_manager = ConnectionManager()
-start_time: Optional[datetime] = None
-background_tasks: List[asyncio.Task] = []
+start_time: datetime | None = None
+background_tasks: list[asyncio.Task] = []
 
 # Configuration - Set these to False to disable
 ENABLE_MARKET_MAKER = False

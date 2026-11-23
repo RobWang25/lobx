@@ -2,10 +2,9 @@
 Data models for the trading exchange.
 Immutable dataclasses for orders, trades, and events.
 """
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
 from datetime import datetime
 import uuid
 

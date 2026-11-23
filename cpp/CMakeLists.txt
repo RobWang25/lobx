@@ -12,7 +12,7 @@
 #
 # The Python module isn't built here. pip builds it through pyproject.toml, which
 # runs this file with SKBUILD set:
-#   .venv2/bin/python -m pip install --no-build-isolation -e .
+#   .venv/bin/python -m pip install --no-build-isolation -e .
 
 cmake_minimum_required(VERSION 3.25)
 project(lobx_cpp CXX)
@@ -61,7 +61,7 @@ set(LOBX_WARNINGS -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 
 # SKBUILD is set when pip builds the package. Then we only need the Python module.
 if(SKBUILD)
-  find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)
+  find_package(Python 3.14 REQUIRED COMPONENTS Interpreter Development.Module)
   find_package(nanobind CONFIG REQUIRED)
 
   # Builds lobx/_core.<platform>.so. NB_STATIC links nanobind's own support code

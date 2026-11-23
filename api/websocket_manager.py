@@ -1,14 +1,12 @@
 from fastapi import WebSocket
-from typing import Dict, List, Set
-import json
 
 
 class ConnectionManager:
     """Manages WebSocket connections for market data and user notifications"""
     
     def __init__(self):
-        self.market_connections: Set[WebSocket] = set()
-        self.user_connections: Dict[str, Set[WebSocket]] = {}
+        self.market_connections: set[WebSocket] = set()
+        self.user_connections: dict[str, set[WebSocket]] = {}
     
     async def connect_market(self, websocket: WebSocket):
         """Connect to global market data feed"""

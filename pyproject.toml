@@ -1,10 +1,9 @@
 # Builds lobx with its optional C++ core, lobx._core.
 #
 # Development install, after changing C++ code too:
-#   .venv2/bin/python -m pip install --no-build-isolation -e .
+#   .venv/bin/python -m pip install --no-build-isolation -e .
 #
-# The pure Python engine doesn't need this. It runs straight from the source tree
-# on any supported Python version.
+# The pure Python engine doesn't need this. It runs straight from the source tree.
 
 [build-system]
 requires = ["scikit-build-core==1.1.2", "nanobind==3.1.0"]
@@ -14,7 +13,7 @@ build-backend = "scikit_build_core.build"
 name = "lobx"
 version = "0.2.0"
 description = "Limit order book exchange with an optional C++ matching core"
-requires-python = ">=3.10"  # nanobind 3.x needs 3.10 or newer
+requires-python = ">=3.14"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"

@@ -3,7 +3,6 @@ Utility functions for the trading exchange.
 """
 from decimal import Decimal
 from datetime import datetime
-from typing import List
 import random
 
 from .models import Order, Side, generate_order_id
@@ -54,7 +53,7 @@ def generate_order_flow(
     symbol: str = "TEST",
     num_users: int = 10,
     seed: int = None
-) -> List[Order]:
+) -> list[Order]:
     """
     Generate a sequence of random orders.
     
@@ -86,7 +85,7 @@ def create_market_maker_orders(
     depth_levels: int = 5,
     quantity_per_level: int = 100,
     user_id: str = "market_maker"
-) -> List[Order]:
+) -> list[Order]:
     """
     Create market maker orders (bids and asks) around a midprice.
     
@@ -134,7 +133,7 @@ def create_market_maker_orders(
     return orders
 
 
-def calculate_vwap(trades: List) -> Decimal:
+def calculate_vwap(trades: list) -> Decimal:
     """
     Calculate volume-weighted average price.
     
@@ -202,7 +201,7 @@ def simulate_random_walk(
     num_steps: int,
     volatility: float = 0.01,
     seed: int = None
-) -> List[Decimal]:
+) -> list[Decimal]:
     """
     Simulate a random walk price path.
     

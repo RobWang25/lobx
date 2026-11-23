@@ -2,8 +2,7 @@
 Property-based tests using Hypothesis.
 Tests invariants that should always hold.
 """
-import pytest
-from hypothesis import given, strategies as st, assume, settings
+from hypothesis import given, strategies as st, settings
 from dataclasses import replace
 from decimal import Decimal
 from datetime import datetime

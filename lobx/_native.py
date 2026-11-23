@@ -6,11 +6,10 @@ The C++ core (lobx._core) only handles integers. Prices become whole units of
 integers (see IdMap here and NativeOrderBook in lobx/native_book.py).
 
 lobx._core is optional. It exists only after building the package with
-`pip install -e .` on Python 3.10 or newer, so check AVAILABLE first.
+`pip install -e .`, so check AVAILABLE first.
 """
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Dict, List
 
 try:
     from . import _core
@@ -71,8 +70,8 @@ class IdMap:
     """
 
     def __init__(self):
-        self._numbers: Dict[str, int] = {}
-        self._names: List[str] = []
+        self._numbers: dict[str, int] = {}
+        self._names: list[str] = []
 
     def number(self, name: str) -> int:
         """Return the integer for this name, assigning the next one if it's new."""

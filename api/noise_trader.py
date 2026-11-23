@@ -1,7 +1,6 @@
 import asyncio
 import random
 from decimal import Decimal
-from typing import List
 from datetime import datetime
 
 from lobx.engine import TradingEngine
@@ -17,7 +16,7 @@ class NoiseTrader:
     def __init__(
         self,
         trading_engine: TradingEngine,
-        symbols: List[str],
+        symbols: list[str],
         user_id: str,
         order_rate: float = 1.0,  # orders per second
         quantity_range: tuple = (1, 50),

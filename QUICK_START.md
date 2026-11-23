@@ -85,7 +85,7 @@ TradingEngine(
 )
 ```
 
-The `cpp` backend needs a one-time build on Python 3.10 or newer: `python -m pip install -e .`. See the README's C++ Backend section.
+The `cpp` backend needs a one-time build: `python -m pip install -e .`. See the README's C++ Backend section.
 
 ##s Mobile Access
 

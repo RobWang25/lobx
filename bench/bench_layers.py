@@ -2,7 +2,7 @@
 """
 Measure throughput at each layer, from the bare C++ core up to HTTP.
 
-    .venv2/bin/python bench/bench_layers.py --label my-run
+    .venv/bin/python bench/bench_layers.py --label my-run
 
 Layers, each on the same seeded workloads:
   core          C++ only, through Google Benchmark (build/cpp-release/lobx_bench)
@@ -162,7 +162,7 @@ def main():
                         help="operations per HTTP run, from the start of the mixed workload")
     args = parser.parse_args()
     if not AVAILABLE:
-        sys.exit("lobx._core isn't built. Run: .venv2/bin/python -m pip install --no-build-isolation -e .")
+        sys.exit("lobx._core isn't built. Run: .venv/bin/python -m pip install --no-build-isolation -e .")
 
     manifest = json.loads((HERE / "workload_manifest.json").read_text())
     ops = {}

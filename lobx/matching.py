@@ -2,7 +2,6 @@
 Matching engine with price-time priority.
 Implements FIFO matching within price levels.
 """
-from typing import List, Tuple
 from datetime import datetime
 
 from .models import Order, Trade, Side, OrderStatus, generate_trade_id
@@ -31,7 +30,7 @@ class MatchingEngine:
         self.enable_self_trade_prevention = enable_self_trade_prevention
         self.total_trades = 0
     
-    def match_order(self, order: Order, book: OrderBook) -> Tuple[List[Trade], Order]:
+    def match_order(self, order: Order, book: OrderBook) -> tuple[list[Trade], Order]:
         """
         Match incoming order against order book.
         

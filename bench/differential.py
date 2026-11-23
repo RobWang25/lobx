@@ -7,9 +7,9 @@ result and the cancel result must match, and every few operations the whole book
 must match too, down to each resting Order object. Any difference stops the run
 and prints the operation.
 
-    .venv2/bin/python bench/differential.py random --ops 1000000
-    .venv2/bin/python bench/differential.py workloads
-    .venv2/bin/python bench/differential.py session
+    .venv/bin/python bench/differential.py random --ops 1000000
+    .venv/bin/python bench/differential.py workloads
+    .venv/bin/python bench/differential.py session
 
 Trade IDs and trade timestamps aren't compared, because the backends make them
 differently. Self-trade cancels are compared through their effect on the book.
@@ -232,7 +232,7 @@ def replay_session(path):
 
 def main():
     if not AVAILABLE:
-        sys.exit("lobx._core isn't built. Run: .venv2/bin/python -m pip install --no-build-isolation -e .")
+        sys.exit("lobx._core isn't built. Run: .venv/bin/python -m pip install --no-build-isolation -e .")
 
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)

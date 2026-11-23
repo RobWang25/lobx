@@ -2,7 +2,6 @@
 Async matching engine with batch processing and optional thread safety.
 """
 import asyncio
-from typing import List, Tuple, Optional
 from datetime import datetime
 from threading import Lock
 
@@ -45,13 +44,13 @@ class AsyncMatchingEngine:
         
         # Batch processing queue
         self._order_queue: asyncio.Queue = asyncio.Queue()
-        self._batch_processor_task: Optional[asyncio.Task] = None
+        self._batch_processor_task: asyncio.Task | None = None
     
     async def match_order(
         self, 
         order: Order, 
         book: OrderBook
-    ) -> Tuple[List[Trade], Order]:
+    ) -> tuple[list[Trade], Order]:
         """
         Match incoming order against order book (async version).
         
@@ -72,7 +71,7 @@ class AsyncMatchingEngine:
         self, 
         order: Order, 
         book: OrderBook
-    ) -> Tuple[List[Trade], Order]:
+    ) -> tuple[list[Trade], Order]:
         """Internal match order implementation"""
         trades = []
         remaining_qty = order.quantity
@@ -136,9 +135,9 @@ class AsyncMatchingEngine:
     
     async def match_batch(
         self, 
-        orders: List[Order], 
+        orders: list[Order], 
         book: OrderBook
-    ) -> List[Tuple[Order, List[Trade], Order]]:
+    ) -> list[tuple[Order, list[Trade], Order]]:
         """
         Match a batch of orders for better throughput.
         

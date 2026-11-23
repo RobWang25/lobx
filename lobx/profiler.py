@@ -6,7 +6,7 @@ import pstats
 import io
 import time
 from functools import wraps
-from typing import Callable, Any
+from collections.abc import Callable
 from contextlib import contextmanager
 
 

@@ -7,7 +7,6 @@ like a queue, and it can also delete any order by ID without scanning.
 """
 from collections import OrderedDict, defaultdict
 from decimal import Decimal
-from typing import Optional, Dict, List, Set, Tuple
 import heapq
 
 from .models import Order, Side, OrderStatus
@@ -20,7 +19,7 @@ class BookQueries:
     A subclass provides symbol, get_best_bid, get_best_ask and get_levels.
     """
 
-    def get_spread(self) -> Optional[Decimal]:
+    def get_spread(self) -> Decimal | None:
         """Get bid-ask spread."""
         bid = self.get_best_bid()
         ask = self.get_best_ask()
@@ -28,7 +27,7 @@ class BookQueries:
             return ask - bid
         return None
 
-    def get_midprice(self) -> Optional[Decimal]:
+    def get_midprice(self) -> Decimal | None:
         """Get mid price."""
         bid = self.get_best_bid()
         ask = self.get_best_ask()
@@ -78,19 +77,19 @@ class OrderBook(BookQueries):
         self.symbol = symbol
         
         # Price levels with FIFO queues
-        self.bids: Dict[Decimal, "OrderedDict[str, Order]"] = defaultdict(OrderedDict)
-        self.asks: Dict[Decimal, "OrderedDict[str, Order]"] = defaultdict(OrderedDict)
+        self.bids: dict[Decimal, "OrderedDict[str, Order]"] = defaultdict(OrderedDict)
+        self.asks: dict[Decimal, "OrderedDict[str, Order]"] = defaultdict(OrderedDict)
         
         # Order index for fast lookups
-        self.order_index: Dict[str, Order] = {}
+        self.order_index: dict[str, Order] = {}
         
         # Best prices (max heap for bids, min heap for asks)
-        self.bid_prices: List[Decimal] = []  # Use negative prices for max-heap
-        self.ask_prices: List[Decimal] = []
+        self.bid_prices: list[Decimal] = []  # Use negative prices for max-heap
+        self.ask_prices: list[Decimal] = []
 
         # Prices currently in each heap, so each price is pushed only once
-        self._bid_prices_in_heap: Set[Decimal] = set()
-        self._ask_prices_in_heap: Set[Decimal] = set()
+        self._bid_prices_in_heap: set[Decimal] = set()
+        self._ask_prices_in_heap: set[Decimal] = set()
 
         # Statistics
         self.total_orders = 0
@@ -132,7 +131,7 @@ class OrderBook(BookQueries):
         
         return True
     
-    def cancel_order(self, order_id: str) -> Optional[Order]:
+    def cancel_order(self, order_id: str) -> Order | None:
         """
         Cancel order by ID.
         
@@ -165,7 +164,7 @@ class OrderBook(BookQueries):
         
         return order.with_status(OrderStatus.CANCELLED)
     
-    def get_order(self, order_id: str) -> Optional[Order]:
+    def get_order(self, order_id: str) -> Order | None:
         """Get order by ID. O(1) lookup."""
         return self.order_index.get(order_id)
 
@@ -173,7 +172,7 @@ class OrderBook(BookQueries):
         """Whether an order with this ID is resting in the book."""
         return order_id in self.order_index
     
-    def get_best_bid(self) -> Optional[Decimal]:
+    def get_best_bid(self) -> Decimal | None:
         """
         Get best bid price.
         
@@ -190,7 +189,7 @@ class OrderBook(BookQueries):
             self._bid_prices_in_heap.discard(best)
         return None
     
-    def get_best_ask(self) -> Optional[Decimal]:
+    def get_best_ask(self) -> Decimal | None:
         """
         Get best ask price.
         
@@ -207,7 +206,7 @@ class OrderBook(BookQueries):
             self._ask_prices_in_heap.discard(best)
         return None
     
-    def get_levels(self, side: Side, depth: Optional[int] = None) -> List[Tuple[Decimal, int, int]]:
+    def get_levels(self, side: Side, depth: int | None = None) -> list[tuple[Decimal, int, int]]:
         """
         Get (price, total quantity, order count) for each price, best price first.
 
@@ -222,12 +221,12 @@ class OrderBook(BookQueries):
             for price in prices[:depth]
         ]
 
-    def get_orders_at_price(self, side: Side, price: Decimal) -> List[Order]:
+    def get_orders_at_price(self, side: Side, price: Decimal) -> list[Order]:
         """Get all orders at a specific price level."""
         queue = self.bids[price] if side == Side.BUY else self.asks[price]
         return list(queue.values())
     
-    def peek_best_order(self, side: Side) -> Optional[Order]:
+    def peek_best_order(self, side: Side) -> Order | None:
         """
         Peek at best order on given side without removing.
         
@@ -247,7 +246,7 @@ class OrderBook(BookQueries):
                 return next(iter(self.asks[price].values()))
         return None
     
-    def pop_best_order(self, side: Side) -> Optional[Order]:
+    def pop_best_order(self, side: Side) -> Order | None:
         """
         Remove and return best order on given side.
         
@@ -275,7 +274,7 @@ class OrderBook(BookQueries):
                 return order
         return None
     
-    def reduce_best_order(self, side: Side, quantity: int) -> Optional[Order]:
+    def reduce_best_order(self, side: Side, quantity: int) -> Order | None:
         """
         Partially fill the best order on the given side, keeping its queue position.
 
