@@ -32,13 +32,28 @@ def make_order(order_id, user, side, price, quantity, timestamp=NOW):
 
 
 class TestChoosingABackend:
-    def test_defaults_to_python(self, monkeypatch):
-        monkeypatch.delenv("LOBX_BACKEND", raising=False)
-        assert resolve_backend() == "python"
+    @needs_core
+    @pytest.mark.parametrize("configured", [None, ""])
+    def test_automatic_backend_prefers_cpp(self, monkeypatch, configured):
+        if configured is None:
+            monkeypatch.delenv("LOBX_BACKEND", raising=False)
+        else:
+            monkeypatch.setenv("LOBX_BACKEND", configured)
+        assert TradingEngine().backend == "cpp"
 
-    def test_empty_environment_defaults_to_python(self, monkeypatch):
+    @pytest.mark.parametrize("configured", [None, ""])
+    def test_automatic_backend_warns_when_the_core_is_missing(self, monkeypatch, configured):
+        if configured is None:
+            monkeypatch.delenv("LOBX_BACKEND", raising=False)
+        else:
+            monkeypatch.setenv("LOBX_BACKEND", configured)
+        monkeypatch.setattr(_native, "AVAILABLE", False)
+        with pytest.warns(RuntimeWarning, match="Using the Python backend"):
+            assert TradingEngine().backend == "python"
+
+    def test_async_uses_python_when_no_backend_is_selected(self, monkeypatch):
         monkeypatch.setenv("LOBX_BACKEND", "")
-        assert TradingEngine().backend == "python"
+        assert TradingEngine(use_async=True).backend == "python"
 
     @needs_core
     def test_reads_the_environment(self, monkeypatch):

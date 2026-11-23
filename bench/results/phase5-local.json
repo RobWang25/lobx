@@ -1,0 +1,53 @@
+{
+  "python": "3.14.2",
+  "machine": "Apple M3 Pro",
+  "lobx_source_sha256": "bc316df8b72f870ab52f21aeea8965bafe318d848c83f03aad1d095974bc653e",
+  "core_binary_sha256": "067f5150234bf16636f3cd11f78075cecacdd5fd814d2ddbbd9ddb0555e85cd3",
+  "binding_sha256": "415e34add642e6890c73b14bc6afe79decedec21ba80acb47e28524e1bb510c5",
+  "workload_sha256": {
+    "deep_book": "5440aef1a93357444aaf1a982c20b723aec1d9e023d798a81bba41ff5545f3b3",
+    "mixed": "2929e4c5911e26d127a68a7e44097386494eae935691add6dff69b4f833ef04b",
+    "cancel_heavy": "8b081efcd9fc7ca56a0ff5e3e2d8614c0b6945954ab8bc71cbfd472bb5e4db89"
+  },
+  "rounds": 3,
+  "http_ops": 3000,
+  "ops_per_sec": {
+    "core vector": {
+      "deep_book": 2431191,
+      "mixed": 21394011,
+      "cancel_heavy": 33398976
+    },
+    "core map": {
+      "deep_book": 9231767,
+      "mixed": 11786246,
+      "cancel_heavy": 30476927
+    },
+    "binding": {
+      "deep_book": 1901984,
+      "mixed": 5578087,
+      "cancel_heavy": 8002187
+    },
+    "engine cpp": {
+      "deep_book": 465125,
+      "mixed": 546305,
+      "cancel_heavy": 986488
+    },
+    "engine python": {
+      "deep_book": 356696,
+      "mixed": 178982,
+      "cancel_heavy": 524629
+    }
+  },
+  "http": {
+    "http python": {
+      "ops_per_sec": 2111.6,
+      "p50_us": 461.0,
+      "p99_us": 691.7
+    },
+    "http cpp": {
+      "ops_per_sec": 2102.7,
+      "p50_us": 459.1,
+      "p99_us": 728.8
+    }
+  }
+}

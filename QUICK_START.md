@@ -80,12 +80,13 @@ TradingEngine(
     event_callback=None,      # Async event callback
     use_async=False,          # Leave off: async matching doesn't work
     enable_profiling=False,   # Performance profiling
-    backend=None,             # "python" or "cpp", defaults to LOBX_BACKEND, then "python"
-    self_trade_prevention=True
+    backend=None,             # "python", "cpp", or automatic selection
+    self_trade_prevention=True,
+    latency_window=100_000,   # Recent submit latency samples to keep
 )
 ```
 
-Build the `cpp` backend on Python 3.10 or newer with `python -m pip install -e .`. The README's C++ Backend section shows how to select it.
+Use Python 3.14 for development. The extension also supports Python 3.10 and newer. Build it with `python -m pip install -e .`. The engine selects C++ automatically when the extension is available, and warns before falling back to Python when it is missing.
 
 ##s Mobile Access
 

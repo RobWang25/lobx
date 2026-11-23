@@ -1,0 +1,18 @@
+{
+  "python": "3.14.2",
+  "repetitions": 5,
+  "iterations": 100000,
+  "ns_per_sample": {
+    "price_to_units": 563.9,
+    "price_cache_lookup": 21.4,
+    "timestamp_to_micros": 179.0,
+    "trade_dataclass": 851.4,
+    "order_dataclass": 846.0,
+    "trade_field_reads": 170.2,
+    "trade_tuple_unpack": 22.4,
+    "find_resting_order": 60.5,
+    "raw_binding_submit_pair": 272.9,
+    "wrapper_submit_cancel_pair": 4337.4,
+    "cancelled_order_construction": 2445.0
+  }
+}

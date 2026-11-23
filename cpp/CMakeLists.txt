@@ -26,6 +26,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(LOBX_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(LOBX_WERROR "Treat warnings in lobx targets as errors" OFF)
 
 # Set before fetching dependencies, so they get the same checks as our code.
 if(LOBX_SANITIZE)
@@ -58,6 +59,9 @@ target_include_directories(lobx_core INTERFACE include)
 target_link_libraries(lobx_core INTERFACE unordered_dense::unordered_dense)
 
 set(LOBX_WARNINGS -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+if(LOBX_WERROR)
+  list(APPEND LOBX_WARNINGS -Werror)
+endif()
 
 # SKBUILD is set when pip builds the package. Then we only need the Python module.
 if(SKBUILD)

@@ -19,6 +19,44 @@ Each figure is the median of five runs of 100,000 samples on Python 3.14.2. The 
 
 The compact binding packs more data per submit. A resting-order and matching-order pair took 430 ns through the compact binding and 296 ns through the original binding in the after run. The compact result saves work on the Python side by carrying both the trade fields and the removed resting IDs. The raw binding benchmark measures the original `submit` interface.
 
+At the wrapper level, a submit and cancel that returns the cancelled order went from 4.34 µs to 2.06 µs. The path that returns only a boolean took 1.14 µs. [Before measurements](bench/results/phase5-timeit-before.json) · [After measurements](bench/results/phase5-timeit-after.json)
+
+### Engine throughput
+
+Both Phase 5 backends ran on the same Apple M3 Pro with Python 3.14.2, logging off, and the order of the layers rotated between rounds. Each number is the median of three 200,000-operation runs. The Phase 4 column comes from the earlier run. The Phase 5 numbers also include bounded latency recording.
+
+| Workload | Phase 4 C++ ops/sec | Phase 5 C++ ops/sec | Phase 5 Python ops/sec | Phase 5 C++ / Python |
+| --- | ---: | ---: | ---: | ---: |
+| `deep_book` | 325,339 | 465,125 | 356,696 | 1.30× |
+| `mixed` | 319,414 | 546,305 | 178,982 | 3.05× |
+| `cancel_heavy` | 370,050 | 986,488 | 524,629 | 1.88× |
+
+Average time per `mixed` operation through the C++-backed engine fell from 3.13 µs to 1.83 µs across the two runs. In the Phase 5 HTTP benchmark, Python handled 2,112 requests/sec at a 461 µs median, and C++ handled 2,103 requests/sec at a 459 µs median. [Layered and HTTP results](bench/results/phase5-local.json)
+
+### Per-operation latency
+
+The timed replay measured each operation with logging off and reported the round with median throughput out of three rounds per backend. Python tails varied substantially from the archived baseline. These percentiles describe the local replay.
+
+| Workload | Python p50 | Python p99 | C++ p50 | C++ p99 |
+| --- | ---: | ---: | ---: | ---: |
+| `deep_book` | 2.08 µs | 373.92 µs | 1.71 µs | 6.54 µs |
+| `mixed` | 2.25 µs | 519.29 µs | 1.58 µs | 5.08 µs |
+| `cancel_heavy` | 1.58 µs | 255.08 µs | 1.29 µs | 3.12 µs |
+
+Both backends reproduced the Phase 0 result hashes for all three workloads. [Python replay results](bench/results/phase5-engine-python-local.json) · [C++ replay results](bench/results/phase5-engine-cpp-local.json)
+
+### Reproduce the measurements
+
+Build the extension and release benchmark as described below. Run the wrapper measurements against the revision you want to measure, with its corresponding extension. Use new labels to keep the archived results.
+
+```bash
+.venv/bin/python bench/generate_workloads.py
+.venv/bin/python bench/bench_wrapper.py
+.venv/bin/python bench/bench_layers.py --label my-layered-run --rounds 3 --http-ops 3000
+.venv/bin/python bench/run_baseline.py --backend python --label my-python-run --logging-modes off
+.venv/bin/python bench/run_baseline.py --backend cpp --label my-cpp-run --logging-modes off
+```
+
 ## Phase 4 benchmarks
 
 The release benchmark measures both C++ ladders, the nanobind calls with prepared integer arguments, and both `TradingEngine` backends with prepared orders and event logging disabled. Each in-process workload contains 200,000 operations. Google Benchmark measures elapsed time for the core workload runs. The Python runner rotates the order of the remaining layers between rounds.

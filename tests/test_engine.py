@@ -198,6 +198,31 @@ class TestStatistics:
         assert "latency" in stats
         assert len(engine.latencies) == 1
         assert engine.latencies[0] >= 0  # Positive latency
+
+    def test_latency_window_retains_the_latest_samples_and_resets(self):
+        engine = TradingEngine(enable_logging=False, latency_window=3)
+        latencies = engine.latencies
+        samples = []
+        for i in range(5):
+            engine.submit_order(Order(str(i), "u1", "TEST", Side.BUY, Decimal("100.00"), 1, datetime.now()))
+            samples.append(latencies[-1])
+
+        stats = engine.get_statistics()
+        assert list(latencies) == samples[-3:]
+        assert stats["total_orders_submitted"] == 5
+        assert stats["operation_latencies"]["submit_order"]["count"] == 3
+        assert stats["latency"]["p99_ms"] == max(samples[-3:])
+
+        engine.reset_statistics()
+        assert not latencies
+        assert engine.get_statistics()["operation_latencies"] == {}
+        engine.submit_order(Order("new", "u1", "TEST", Side.BUY, Decimal("100.00"), 1, datetime.now()))
+        assert len(latencies) == 1
+        assert engine.latency_tracker.get_stats("submit_order")["count"] == 1
+
+    def test_latency_window_must_be_positive(self):
+        with pytest.raises(ValueError, match="latency window must be at least 1"):
+            TradingEngine(backend="python", latency_window=0)
     
     def test_throughput_calculation(self, engine):
         """Test throughput calculation."""

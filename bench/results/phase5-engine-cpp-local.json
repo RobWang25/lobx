@@ -1,0 +1,84 @@
+{
+  "python": "3.14.2",
+  "backend": "cpp",
+  "machine": "arm64",
+  "lobx_source_sha256": "bc316df8b72f870ab52f21aeea8965bafe318d848c83f03aad1d095974bc653e",
+  "repeats": 3,
+  "workloads": {
+    "deep_book": {
+      "logging_off": {
+        "ops_per_sec": 420783,
+        "seconds": 0.475,
+        "latency_us": {
+          "p50": 1.71,
+          "p90": 4.04,
+          "p99": 6.54,
+          "p999": 10.33,
+          "max": 10466.62
+        },
+        "trades": 34564,
+        "traded_quantity": 878458,
+        "cancels": 23804,
+        "cancel_hits": 18458,
+        "resting_orders": 122707,
+        "resting_levels": 30836,
+        "result_sha256": "722befa9ba1fe87946598ebbd6b6bd3209cbcd2d0a3f4c502251e35127dd8740",
+        "all_ops_per_sec": [
+          358730,
+          420783,
+          423296
+        ]
+      }
+    },
+    "mixed": {
+      "logging_off": {
+        "ops_per_sec": 473662,
+        "seconds": 0.422,
+        "latency_us": {
+          "p50": 1.58,
+          "p90": 3.17,
+          "p99": 5.08,
+          "p999": 8.25,
+          "max": 15001.33
+        },
+        "trades": 131841,
+        "traded_quantity": 3358397,
+        "cancels": 29795,
+        "cancel_hits": 5414,
+        "resting_orders": 31307,
+        "resting_levels": 504,
+        "result_sha256": "f6681e1de8d7a323ea52106f22f15c6f35f6765317a46f5dd0a6010fc856f098",
+        "all_ops_per_sec": [
+          408414,
+          473662,
+          491176
+        ]
+      }
+    },
+    "cancel_heavy": {
+      "logging_off": {
+        "ops_per_sec": 839202,
+        "seconds": 0.238,
+        "latency_us": {
+          "p50": 1.29,
+          "p90": 1.5,
+          "p99": 3.12,
+          "p999": 5.33,
+          "max": 11136.38
+        },
+        "trades": 14565,
+        "traded_quantity": 249475,
+        "cancels": 91719,
+        "cancel_hits": 87115,
+        "resting_orders": 6380,
+        "resting_levels": 20,
+        "result_sha256": "208aa1fd4c430f422d0b434e65ac06c2785fce8b0a5255f7a6cea081632cd83f",
+        "all_ops_per_sec": [
+          753314,
+          898165,
+          839202
+        ]
+      }
+    }
+  }
+}

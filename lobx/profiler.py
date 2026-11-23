@@ -5,6 +5,8 @@ import cProfile
 import pstats
 import io
 import time
+from collections import deque
+from operator import index
 from functools import wraps
 from typing import Callable, Any
 from contextlib import contextmanager
@@ -141,18 +143,26 @@ class LatencyTracker:
     """
     Simple latency tracker for identifying hot paths.
     
-    Lightweight alternative to full profiling.
+    Keeps a bounded window of recent measurements for each operation.
     """
     
-    def __init__(self, percentiles=(50, 95, 99)):
+    def __init__(self, percentiles=(50, 95, 99), window: int = 100_000):
+        self._window = index(window)
+        if self._window < 1:
+            raise ValueError("latency window must be at least 1")
         self.percentiles = percentiles
-        self.measurements = {}
+        self.measurements: dict[str, deque[float]] = {}
+
+    def series(self, operation: str) -> deque[float]:
+        """Return the rolling series, with the oldest measurement first."""
+        values = self.measurements.get(operation)
+        if values is None:
+            values = self.measurements[operation] = deque(maxlen=self._window)
+        return values
     
     def record(self, operation: str, latency_ms: float):
         """Record a latency measurement"""
-        if operation not in self.measurements:
-            self.measurements[operation] = []
-        self.measurements[operation].append(latency_ms)
+        self.series(operation).append(latency_ms)
     
     def get_stats(self, operation: str = None):
         """
@@ -167,7 +177,8 @@ class LatencyTracker:
         if operation:
             return self._compute_stats(operation)
         
-        return {op: self._compute_stats(op) for op in self.measurements}
+        return {op: stats for op in self.measurements
+                if (stats := self._compute_stats(op)) is not None}
     
     def _compute_stats(self, operation: str):
         """Compute statistics for an operation"""
@@ -195,4 +206,5 @@ class LatencyTracker:
     
     def reset(self):
         """Reset all measurements"""
-        self.measurements.clear()
+        for values in self.measurements.values():
+            values.clear()
