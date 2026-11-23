@@ -94,6 +94,14 @@ else:
         engine, *_ = replay([], enable_logging=False)
         assert engine.backend == "python"
 
+    @needs_core
+    def test_baseline_runner_can_select_cpp(self, monkeypatch):
+        from bench.run_baseline import replay
+
+        monkeypatch.setenv("LOBX_BACKEND", "python")
+        engine, *_ = replay([], enable_logging=False, backend="cpp")
+        assert engine.backend == "cpp"
+
 
 @pytest.mark.parametrize("backend", BACKENDS)
 class TestBothBackends:

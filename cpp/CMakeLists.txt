@@ -5,9 +5,10 @@
 #   cmake --build build/cpp-asan
 #   ctest --test-dir build/cpp-asan --output-on-failure
 #
-# Optimized build, for speed:
+# Optimized build, including the benchmarks:
 #   cmake -S cpp -B build/cpp-release -G Ninja -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build/cpp-release
+#   ./build/cpp-release/lobx_bench
 #
 # The Python module isn't built here. pip builds it through pyproject.toml, which
 # runs this file with SKBUILD set:
@@ -85,6 +86,7 @@ add_executable(lobx_tests
   tests/test_order_book.cpp
   tests/test_matching.cpp
   tests/test_no_allocation.cpp
+  tests/test_ladders.cpp
 )
 target_link_libraries(lobx_tests PRIVATE lobx_core Catch2::Catch2WithMain)
 target_compile_options(lobx_tests PRIVATE ${LOBX_WARNINGS})
@@ -101,3 +103,24 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/invalid-workload.txt"
 add_test(NAME lobx_replay_rejects_invalid_side
   COMMAND lobx_replay "${CMAKE_CURRENT_BINARY_DIR}/invalid-workload.txt")
 set_tests_properties(lobx_replay_rejects_invalid_side PROPERTIES WILL_FAIL TRUE)
+
+if(NOT LOBX_SANITIZE)
+  set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+  set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+  set(BENCHMARK_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    benchmark
+    GIT_REPOSITORY https://github.com/google/benchmark.git
+    GIT_TAG v1.9.1
+    GIT_SHALLOW TRUE
+    SYSTEM
+  )
+  FetchContent_MakeAvailable(benchmark)
+
+  add_executable(lobx_bench bench/bench_core.cpp)
+  target_link_libraries(lobx_bench PRIVATE lobx_core benchmark::benchmark)
+  target_include_directories(lobx_bench PRIVATE tools)
+  target_compile_options(lobx_bench PRIVATE ${LOBX_WARNINGS})
+  target_compile_definitions(lobx_bench PRIVATE
+    LOBX_WORKLOAD_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../bench/workloads")
+endif()

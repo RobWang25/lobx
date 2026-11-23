@@ -6,6 +6,7 @@ Each workload's output from cpp/tools/replay.cpp must hash to the result_sha256
 recorded by bench/run_baseline.py. Build the C++ tools first, then run:
 
     python bench/check_cpp_results.py build/cpp-release/lobx_replay
+    python bench/check_cpp_results.py build/cpp-release/lobx_replay --ladder map
 """
 import argparse
 import hashlib
@@ -18,21 +19,31 @@ HERE = Path(__file__).resolve().parent
 PYTHON_RESULTS = HERE / "results" / "cancel-o1-py3.14.json"
 
 
-def load_expected_workloads(python_results_path):
-    """Load reference hashes and verify the files match the workload manifest."""
-    if not python_results_path.is_file():
-        raise ValueError(f"{python_results_path} is missing. Run bench/run_baseline.py and pass its JSON with --python-results.")
-
+def load_workload_inputs():
+    """Get the paths and manifest entries for the verified benchmark inputs."""
     manifest = json.loads((HERE / "workload_manifest.json").read_text())
-    python_results = json.loads(python_results_path.read_text())["workloads"]
     workloads = []
     for name, entry in manifest.items():
-        expected = python_results.get(name, {}).get("logging_off", {}).get("result_sha256")
-        if not expected:
-            raise ValueError(f"The Python baseline has no logging-off result hash for {name}.")
         workload = HERE / "workloads" / f"{name}.txt"
         if not workload.is_file() or hashlib.sha256(workload.read_bytes()).hexdigest() != entry["sha256"]:
             raise ValueError(f"{workload} is missing or stale. Run bench/generate_workloads.py first.")
+        workloads.append((name, workload, entry))
+    return workloads
+
+
+def load_expected_workloads(python_results_path):
+    """Load reference hashes for the verified benchmark inputs."""
+    if not python_results_path.is_file():
+        raise ValueError(f"{python_results_path} is missing. Run bench/run_baseline.py and pass its JSON with --python-results.")
+    baseline = json.loads(python_results_path.read_text())
+    if baseline.get("backend", "python") != "python":
+        raise ValueError("Use a baseline measured on the Python backend")
+    python_results = baseline["workloads"]
+    workloads = []
+    for name, workload, _ in load_workload_inputs():
+        expected = python_results.get(name, {}).get("logging_off", {}).get("result_sha256")
+        if not expected:
+            raise ValueError(f"The Python baseline has no logging-off result hash for {name}.")
         workloads.append((name, workload, expected))
     return workloads
 
@@ -40,6 +51,7 @@ def load_expected_workloads(python_results_path):
 def main():
     parser = argparse.ArgumentParser(description="Compare C++ replay hashes with the Python baseline.")
     parser.add_argument("replay", help="path to the lobx_replay executable")
+    parser.add_argument("--ladder", choices=("vector", "map"), default="vector")
     parser.add_argument("--python-results", type=Path, default=PYTHON_RESULTS,
                         help="baseline JSON from bench/run_baseline.py with logging off")
     args = parser.parse_args()
@@ -51,7 +63,7 @@ def main():
     all_match = True
     for name, workload, expected in workloads:
         run = subprocess.run(
-            [args.replay, str(workload)],
+            [args.replay, "--ladder", args.ladder, str(workload)],
             capture_output=True,
             check=True,
         )

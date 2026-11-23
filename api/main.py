@@ -248,6 +248,8 @@ async def cancel_order(symbol: str, order_id: str):
             return {"status": "cancelled", "order_id": order_id}
         else:
             raise HTTPException(status_code=404, detail="Order not found")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

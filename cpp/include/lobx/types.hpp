@@ -51,6 +51,9 @@ struct Trade {
     Price price;
     Quantity quantity;
     Timestamp timestamp;  // The incoming order's timestamp
+
+    // `= default` asks the compiler to compare every field in order (C++20).
+    bool operator==(const Trade&) const = default;
 };
 
 enum class SubmitStatus : std::uint8_t {
@@ -64,6 +67,8 @@ enum class SubmitStatus : std::uint8_t {
 struct SubmitResult {
     SubmitStatus status;
     Quantity remaining;  // Amount left resting in the book
+
+    bool operator==(const SubmitResult&) const = default;
 };
 
 // Read-only copies returned by queries. They stay valid after the book changes.
@@ -75,12 +80,16 @@ struct OrderView {
     Quantity quantity;
     Timestamp timestamp;
     bool partially_filled;
+
+    bool operator==(const OrderView&) const = default;
 };
 
 struct LevelView {
     Price price;
     Quantity quantity;
     std::uint32_t order_count;
+
+    bool operator==(const LevelView&) const = default;
 };
 
 struct BookStats {
@@ -92,6 +101,8 @@ struct BookStats {
     std::uint64_t ask_levels = 0;
     Quantity total_bid_quantity = 0;
     Quantity total_ask_quantity = 0;
+
+    bool operator==(const BookStats&) const = default;
 };
 
 }  // namespace lobx

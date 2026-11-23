@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Replay the seeded workloads through the Python engine and record a baseline.
+Replay the seeded workloads through TradingEngine and record engine latency.
 
 This measures in-process TradingEngine calls only. Orders are built before the
 clock starts, and HTTP, JSON and WebSockets are not involved.
@@ -62,10 +62,12 @@ def load_ops(path):
     return ops
 
 
-def replay(ops, enable_logging):
+def replay(ops, enable_logging, *, backend="python"):
     """Run every operation once, returning the engine, outcomes and timings."""
     # PYTHONPATH can point at a snapshot from before the backend switch.
-    options = {"backend": "python"} if hasattr(engine_module, "resolve_backend") else {}
+    if backend != "python" and not hasattr(engine_module, "resolve_backend"):
+        raise ValueError("This engine version only supports the Python backend")
+    options = {"backend": backend} if hasattr(engine_module, "resolve_backend") else {}
     engine = TradingEngine(enable_logging=enable_logging, **options)
     outcomes = [None] * len(ops)
     latencies = [0] * len(ops)
@@ -139,7 +141,7 @@ def summarize(ops, outcomes, engine, latencies, elapsed):
     }
 
 
-def run_workload(name, expected_sha256, repeats, enable_logging):
+def run_workload(name, expected_sha256, repeats, enable_logging, *, backend="python"):
     """Run a workload repeatedly and return the run with the median throughput."""
     path = HERE / "workloads" / f"{name}.txt"
     if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != expected_sha256:
@@ -148,7 +150,7 @@ def run_workload(name, expected_sha256, repeats, enable_logging):
     ops = load_ops(path)
     runs = []
     for _ in range(repeats):
-        engine, outcomes, latencies, elapsed = replay(ops, enable_logging)
+        engine, outcomes, latencies, elapsed = replay(ops, enable_logging, backend=backend)
         runs.append(summarize(ops, outcomes, engine, latencies, elapsed))
         del engine, outcomes, latencies
 
@@ -162,6 +164,8 @@ def run_workload(name, expected_sha256, repeats, enable_logging):
 
 
 def cpu_name():
+    if sys.platform != "darwin":
+        return platform.processor() or platform.machine()
     result = subprocess.run(
         ["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True
     )
@@ -179,13 +183,25 @@ def lobx_source_hash():
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--label", required=True, help="results file name, without extension")
+    parser.add_argument("--backend", choices=("python", "cpp"), default="python")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--logging-modes", default="off,on", help="comma-separated: off, on")
     args = parser.parse_args()
+    modes = args.logging_modes.split(",")
+    if args.repeats <= 0 or any(mode not in ("off", "on") for mode in modes):
+        parser.error("Use a positive --repeats count and logging modes of off or on")
+    if hasattr(engine_module, "resolve_backend"):
+        try:
+            engine_module.resolve_backend(args.backend)
+        except (ValueError, RuntimeError) as error:
+            parser.error(str(error))
+    elif args.backend != "python":
+        parser.error("This engine version only supports the Python backend")
 
     manifest = json.loads((HERE / "workload_manifest.json").read_text())
     results = {
         "python": platform.python_version(),
+        "backend": args.backend,
         "machine": cpu_name(),
         "lobx_source_sha256": lobx_source_hash(),
         "repeats": args.repeats,
@@ -193,8 +209,8 @@ def main():
     }
 
     for name, entry in manifest.items():
-        for mode in args.logging_modes.split(","):
-            summary = run_workload(name, entry["sha256"], args.repeats, mode == "on")
+        for mode in modes:
+            summary = run_workload(name, entry["sha256"], args.repeats, mode == "on", backend=args.backend)
             results["workloads"].setdefault(name, {})[f"logging_{mode}"] = summary
             latency = summary["latency_us"]
             print(

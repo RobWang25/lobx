@@ -170,5 +170,4 @@ class TestErrorHandling:
     def test_cancel_nonexistent_order(self, client):
         """Test cancelling order that doesn't exist."""
         response = client.delete("/orders/AAPL/FAKE_ORDER_123")
-        # Returns 400 (Bad Request) or 404 (Not Found) - both are valid
-        assert response.status_code in [400, 404]
+        assert response.status_code == 404

@@ -4,6 +4,9 @@
 // "ladder" for each side finds the best price, and a hash map finds any order by
 // ID. Everything refers to everything else by pool index.
 //
+// The ladder type is a template argument (see ladder.hpp). OrderBook uses the
+// sorted vector, and MapOrderBook uses std::map, for comparison.
+//
 // Not thread-safe: only one thread may call a book at a time.
 #pragma once
 
@@ -15,6 +18,7 @@
 
 #include <ankerl/unordered_dense.h>
 
+#include "lobx/ladder.hpp"
 #include "lobx/pool.hpp"
 #include "lobx/types.hpp"
 
@@ -41,10 +45,11 @@ struct BookOptions {
     std::size_t expected_levels = 0;
 };
 
-class OrderBook {
+template <typename Ladder>
+class BasicOrderBook {
 public:
-    // `explicit` stops a BookOptions from silently converting into an OrderBook.
-    explicit OrderBook(BookOptions options = {})
+    // `explicit` stops a BookOptions from silently converting into a book.
+    explicit BasicOrderBook(BookOptions options = {})
         : self_trade_prevention_(options.self_trade_prevention) {
         orders_.reserve(options.expected_orders);
         index_.reserve(options.expected_orders);
@@ -70,10 +75,10 @@ public:
         }
 
         Quantity remaining = order.quantity;
-        const std::vector<LadderEntry>& opposing = ladder(opposite(order.side));
+        const Ladder& opposing = ladder(opposite(order.side));
 
         while (remaining > 0 && !opposing.empty()) {
-            const Index level_index = opposing.back().level;
+            const Index level_index = opposing.best();
             Level& level = levels_[level_index];
             if (!crosses(order, level.price)) {
                 break;
@@ -134,11 +139,11 @@ public:
     }
 
     std::optional<Price> best_price(Side side) const {
-        const std::vector<LadderEntry>& entries = ladder(side);
+        const Ladder& entries = ladder(side);
         if (entries.empty()) {
             return std::nullopt;
         }
-        return levels_[entries.back().level].price;
+        return levels_[entries.best()].price;
     }
     std::optional<Price> best_bid() const { return best_price(Side::Buy); }
     std::optional<Price> best_ask() const { return best_price(Side::Sell); }
@@ -154,11 +159,11 @@ public:
 
     // The order next in line to trade on this side.
     std::optional<OrderView> peek_best(Side side) const {
-        const std::vector<LadderEntry>& entries = ladder(side);
+        const Ladder& entries = ladder(side);
         if (entries.empty()) {
             return std::nullopt;
         }
-        return view(levels_[entries.back().level].head);
+        return view(levels_[entries.best()].head);
     }
 
     std::optional<OrderView> find(OrderId id) const {
@@ -177,13 +182,11 @@ public:
         if (price <= 0) {
             return result;
         }
-        const std::vector<LadderEntry>& entries = ladder(side);
-        const Price key = sort_key(side, price);
-        const auto entry = lower_bound(entries, key);
-        if (entry == entries.end() || entry->key != key) {
+        const Index level_index = ladder(side).find(sort_key(side, price));
+        if (level_index == kNone) {
             return result;
         }
-        const Level& level = levels_[entry->level];
+        const Level& level = levels_[level_index];
         result.reserve(level.count);
         for (Index i = level.head; i != kNone; i = orders_[i].next) {
             result.push_back(view(i));
@@ -193,15 +196,19 @@ public:
 
     // Price levels, best price first.
     std::vector<LevelView> depth(Side side, std::size_t max_levels) const {
-        const std::vector<LadderEntry>& entries = ladder(side);
+        const Ladder& entries = ladder(side);
         std::vector<LevelView> result;
-        result.reserve(std::min(max_levels, entries.size()));
-        // rbegin/rend walk the vector backwards, because the best price is at the back.
-        for (auto entry = entries.rbegin();
-             entry != entries.rend() && result.size() < max_levels; ++entry) {
-            const Level& level = levels_[entry->level];
-            result.push_back({level.price, level.total_quantity, level.count});
+        if (max_levels == 0) {
+            return result;
         }
+        result.reserve(std::min(max_levels, entries.size()));
+        // The lambda captures result, max_levels and this by reference ([&]), and
+        // returns false to stop once there are enough levels.
+        entries.for_each_best_first([&](Index level_index) {
+            const Level& level = levels_[level_index];
+            result.push_back({level.price, level.total_quantity, level.count});
+            return result.size() < max_levels;
+        });
         return result;
     }
 
@@ -213,12 +220,14 @@ public:
         result.active_orders = index_.size();
         result.bid_levels = bids_.size();
         result.ask_levels = asks_.size();
-        for (const LadderEntry& entry : bids_) {
-            result.total_bid_quantity += levels_[entry.level].total_quantity;
-        }
-        for (const LadderEntry& entry : asks_) {
-            result.total_ask_quantity += levels_[entry.level].total_quantity;
-        }
+        bids_.for_each_best_first([&](Index level_index) {
+            result.total_bid_quantity += levels_[level_index].total_quantity;
+            return true;
+        });
+        asks_.for_each_best_first([&](Index level_index) {
+            result.total_ask_quantity += levels_[level_index].total_quantity;
+            return true;
+        });
         return result;
     }
 
@@ -248,14 +257,8 @@ private:
         Side side = Side::Buy;
     };
 
-    struct LadderEntry {
-        Price key;
-        Index level;
-    };
-
-    // Each ladder is sorted so a bigger key means a better price, with the best at
-    // the back. Bids use the price and asks use its negative, so the same code
-    // handles both sides.
+    // Each ladder is sorted so a bigger key means a better price. Bids use the price
+    // and asks use its negative, so the same code handles both sides.
     static constexpr Price sort_key(Side side, Price price) {
         return side == Side::Buy ? price : -price;
     }
@@ -265,19 +268,8 @@ private:
                                        : order.price <= resting_price;
     }
 
-    // Binary search for the first entry whose key is at least `key`. An iterator is
-    // a position in a container, and a const_iterator can only read through it.
-    static std::vector<LadderEntry>::const_iterator lower_bound(
-        const std::vector<LadderEntry>& entries, Price key) {
-        return std::lower_bound(
-            entries.begin(), entries.end(), key,
-            [](const LadderEntry& entry, Price wanted) { return entry.key < wanted; });
-    }
-
-    std::vector<LadderEntry>& ladder(Side side) { return side == Side::Buy ? bids_ : asks_; }
-    const std::vector<LadderEntry>& ladder(Side side) const {
-        return side == Side::Buy ? bids_ : asks_;
-    }
+    Ladder& ladder(Side side) { return side == Side::Buy ? bids_ : asks_; }
+    const Ladder& ladder(Side side) const { return side == Side::Buy ? bids_ : asks_; }
 
     OrderView view(Index index) const {
         const OrderNode& node = orders_[index];
@@ -286,26 +278,20 @@ private:
                 node.quantity, node.timestamp, node.partially_filled};
     }
 
-    // Finds the level for a price, creating it if needed. O(log L) to find it, plus
-    // O(L) to shift entries when a new level lands far from the best price.
+    // Finds the level for a price, creating it if needed. The lambda only runs when
+    // the price is new.
     Index find_or_create_level(Side side, Price price) {
-        std::vector<LadderEntry>& entries = ladder(side);
-        const Price key = sort_key(side, price);
-        const auto position = lower_bound(entries, key);
-        if (position != entries.end() && position->key == key) {
-            return position->level;
-        }
-
-        const Index level_index = levels_.acquire();
-        Level& level = levels_[level_index];
-        level.price = price;
-        level.total_quantity = 0;
-        level.head = kNone;
-        level.tail = kNone;
-        level.count = 0;
-        level.side = side;
-        entries.insert(position, LadderEntry{key, level_index});
-        return level_index;
+        return ladder(side).find_or_insert(sort_key(side, price), [&] {
+            const Index level_index = levels_.acquire();
+            Level& level = levels_[level_index];
+            level.price = price;
+            level.total_quantity = 0;
+            level.head = kNone;
+            level.tail = kNone;
+            level.count = 0;
+            level.side = side;
+            return level_index;
+        });
     }
 
     void rest_order(const NewOrder& order, Quantity quantity, bool partially_filled) {
@@ -367,27 +353,24 @@ private:
         }
     }
 
-    // O(1) at the best price, otherwise O(L) to shift the entries after it.
     void remove_level(Index level_index) {
         const Level& level = levels_[level_index];
-        std::vector<LadderEntry>& entries = ladder(level.side);
-        if (entries.back().level == level_index) {
-            entries.pop_back();
-        } else {
-            entries.erase(lower_bound(entries, sort_key(level.side, level.price)));
-        }
+        ladder(level.side).erase(sort_key(level.side, level.price));
         levels_.release(level_index);
     }
 
     Pool<OrderNode> orders_;
     Pool<Level> levels_;
-    std::vector<LadderEntry> bids_;
-    std::vector<LadderEntry> asks_;
+    Ladder bids_;
+    Ladder asks_;
     ankerl::unordered_dense::map<OrderId, Index> index_;
     bool self_trade_prevention_;
     std::uint64_t trades_ = 0;
     std::uint64_t self_trade_cancels_ = 0;
     std::uint64_t orders_rested_ = 0;
 };
+
+using OrderBook = BasicOrderBook<VectorLadder>;
+using MapOrderBook = BasicOrderBook<MapLadder>;
 
 }  // namespace lobx

@@ -1,6 +1,80 @@
 # Performance Results
 
-## Current Baseline
+## Phase 4 benchmarks
+
+The release benchmark measures both C++ ladders, the nanobind calls with prepared integer arguments, and both `TradingEngine` backends with prepared orders and event logging disabled. Each in-process workload contains 200,000 operations. Google Benchmark measures elapsed time for the core workload runs. The Python runner rotates the order of the remaining layers between rounds.
+
+The HTTP benchmark sends the first 3,000 operations of `mixed` through one persistent connection to a fresh loopback Uvicorn server per round and backend. API event logging is enabled. The runner checks every cancel response and compares the final submit and trade counts with a Python replay.
+
+Both ladders reproduce the Python result hashes for all three workloads. The Catch2 comparison also checks trades, cancel results, queue order, per-level totals and final statistics across 120,000 seeded operations.
+
+### Local results
+
+Apple M3 Pro with Python 3.14.2. Each entry is the median of 3 rounds.
+
+| Layer, ops/sec | `deep_book` | `mixed` | `cancel_heavy` |
+| --- | ---: | ---: | ---: |
+| C++ core, vector | 2,587,877 | 22,330,982 | 34,190,076 |
+| C++ core, std::map | 9,798,840 | 12,032,378 | 32,035,587 |
+| Raw nanobind binding | 1,928,457 | 5,698,939 | 8,399,156 |
+| Engine, cpp | 325,339 | 319,414 | 370,050 |
+| Engine, python | 338,237 | 183,173 | 541,009 |
+
+| HTTP backend, `mixed` | Requests/sec | p50 | p99 |
+| --- | ---: | ---: | ---: |
+| `python` | 2,106 | 462 µs | 698 µs |
+| `cpp` | 2,086 | 463 µs | 830 µs |
+
+The vector was 1.86× faster on `mixed` and 1.07× faster on `cancel_heavy`. The map was 3.79× faster on `deep_book`, where inserting and removing levels moves many vector entries. The vector is the default ladder.
+
+Through `TradingEngine`, C++ was 1.74× faster on `mixed`. Python had higher throughput on `deep_book` and `cancel_heavy` in this run. Both HTTP backends handled about 2,100 requests/sec with a median around 0.46 ms.
+
+### Level mutations at 100,000 resting levels
+
+The microbenchmarks measure CPU time. Each iteration adds an order at a new level and cancels it after the book has warmed up.
+
+| New level location | Vector, ns/op | Map, ns/op |
+| --- | ---: | ---: |
+| Just above the best bid | 17.9 | 103.9 |
+| Below the worst bid | 24,414 | 46.4 |
+
+The vector shifts its entries on both operations in the far-level test. Those shifts help explain the map's lead on `deep_book`.
+
+### Engine latency in a separate replay
+
+Logging was off and each operation was timed individually. The table shows the median of three rounds with alternating backend order. Python p99 was much higher than the archived baseline in this session, so the tail figures describe this run.
+
+| Workload | Python p50 | Python p99 | C++ p50 | C++ p99 |
+| --- | ---: | ---: | ---: | ---: |
+| `deep_book` | 1.79 µs | 377.92 µs | 2.50 µs | 8.62 µs |
+| `mixed` | 2.29 µs | 545.75 µs | 2.42 µs | 9.12 µs |
+| `cancel_heavy` | 1.58 µs | 259.17 µs | 2.62 µs | 5.88 µs |
+
+### Reproduce the comparisons
+
+Build the Python extension with the steps in the README, then run from the repository root.
+
+```bash
+cmake -S cpp -B build/cpp-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/cpp-release
+ctest --test-dir build/cpp-release --output-on-failure
+.venv/bin/python bench/generate_workloads.py
+.venv/bin/python bench/check_cpp_results.py build/cpp-release/lobx_replay --ladder vector
+.venv/bin/python bench/check_cpp_results.py build/cpp-release/lobx_replay --ladder map
+.venv/bin/python bench/bench_layers.py --label phase4-local --rounds 3 --http-ops 3000
+./build/cpp-release/lobx_bench --benchmark_filter='add_cancel_level|cancel_mid_queue|rest_and_fill' --benchmark_repetitions=3 --benchmark_enable_random_interleaving=true
+```
+
+The layered runner records the medians, input hashes, and binary fingerprints in `build/bench-results/phase4-local.json` for this label. The local microbenchmark and engine latency JSON files are in the same directory.
+
+For per-operation engine latency, select a backend explicitly in the timed replay.
+
+```bash
+.venv/bin/python bench/run_baseline.py --backend python --label phase4-engine-python --logging-modes off
+.venv/bin/python bench/run_baseline.py --backend cpp --label phase4-engine-cpp --logging-modes off
+```
+
+## Phase 0 Python baseline
 
 These numbers are the comparison point for the C++ port. They measure in-process `TradingEngine` calls on an Apple M3 Pro. Orders are built before the clock starts, so HTTP, JSON and WebSockets are not included. Each figure is the median of 3 runs of 200,000 operations, and the runner's per-operation timers add a small overhead.
 
