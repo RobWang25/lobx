@@ -1,0 +1,83 @@
+# The C++ matching core, its tests and a workload replay tool.
+#
+# Checked build, with memory and undefined-behaviour checks:
+#   cmake -S cpp -B build/cpp-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLOBX_SANITIZE=ON
+#   cmake --build build/cpp-asan
+#   ctest --test-dir build/cpp-asan --output-on-failure
+#
+# Optimized build, for speed:
+#   cmake -S cpp -B build/cpp-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+#   cmake --build build/cpp-release
+
+cmake_minimum_required(VERSION 3.25)
+project(lobx_cpp CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Writes compile_commands.json, which tells editors like VS Code the exact
+# flags and include paths each file is compiled with.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+option(LOBX_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+
+# Set before fetching dependencies, so they get the same checks as our code.
+if(LOBX_SANITIZE)
+  add_compile_options(
+    -g
+    -fsanitize=address,undefined
+    -fno-sanitize-recover=undefined  # Stop at the first problem instead of continuing
+    -fno-omit-frame-pointer          # Gives readable stack traces
+  )
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
+# Downloads each dependency at a fixed version when CMake first configures the
+# build. SYSTEM hides warnings from their headers, so we only see warnings about
+# our own code.
+include(FetchContent)
+FetchContent_Declare(
+  unordered_dense
+  GIT_REPOSITORY https://github.com/martinus/unordered_dense.git
+  GIT_TAG v4.5.0
+  GIT_SHALLOW TRUE
+  SYSTEM
+)
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG v3.7.1
+  GIT_SHALLOW TRUE
+  SYSTEM
+)
+FetchContent_MakeAvailable(unordered_dense Catch2)
+
+# The core is header-only, so this library has nothing to compile. Linking to it
+# passes on its include path and its dependency.
+add_library(lobx_core INTERFACE)
+target_include_directories(lobx_core INTERFACE include)
+target_link_libraries(lobx_core INTERFACE unordered_dense::unordered_dense)
+
+set(LOBX_WARNINGS -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+
+add_executable(lobx_tests
+  tests/test_order_book.cpp
+  tests/test_matching.cpp
+  tests/test_no_allocation.cpp
+)
+target_link_libraries(lobx_tests PRIVATE lobx_core Catch2::Catch2WithMain)
+target_compile_options(lobx_tests PRIVATE ${LOBX_WARNINGS})
+
+add_executable(lobx_replay tools/replay.cpp)
+target_link_libraries(lobx_replay PRIVATE lobx_core)
+target_compile_options(lobx_replay PRIVATE ${LOBX_WARNINGS})
+
+enable_testing()
+add_test(NAME lobx_tests COMMAND lobx_tests)
+
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/invalid-workload.txt"
+  CONTENT "N O1 user B 100 10\nN O2 user X 100 10\n")
+add_test(NAME lobx_replay_rejects_invalid_side
+  COMMAND lobx_replay "${CMAKE_CURRENT_BINARY_DIR}/invalid-workload.txt")
+set_tests_properties(lobx_replay_rejects_invalid_side PROPERTIES WILL_FAIL TRUE)

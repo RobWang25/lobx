@@ -1,4 +1,0 @@
-# file: /Users/robertwang/Downloads/School/Intermediate Python/python-market-project/lobx/book.py
-# hypothesis_version: 6.141.1
-
-['active_orders', 'ask_levels', 'asks', 'best_ask', 'best_bid', 'bid_levels', 'bids', 'midprice', 'orders', 'price', 'quantity', 'spread', 'symbol', 'total_ask_quantity', 'total_bid_quantity', 'total_orders']

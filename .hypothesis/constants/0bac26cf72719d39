@@ -1,4 +1,0 @@
-# file: C:\Users\bobwa\Downloads\Masters\python-market-project\lobx\replay.py
-# hypothesis_version: 6.142.4
-
-['cancels_replayed', 'deterministic', 'order_id', 'orders', 'orders_replayed', 'r', 'symbol', 'trades', 'trades_actual', 'trades_expected', 'w']

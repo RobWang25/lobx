@@ -1,4 +1,0 @@
-# file: C:\Users\bobwa\Downloads\Masters\python-market-project\lobx\engine.py
-# hypothesis_version: 6.142.4
-
-[0.95, 0.99, 1000, 'active_symbols', 'books', 'latency', 'max_ms', 'mean_ms', 'min_ms', 'orders_per_second', 'p50_ms', 'p95_ms', 'p99_ms', 'trades_per_second', 'uptime_seconds']

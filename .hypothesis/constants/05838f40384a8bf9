@@ -1,4 +1,0 @@
-# file: /Users/robertwang/Downloads/School/Intermediate Python/python-market-project/api/main.py
-# hypothesis_version: 6.141.1
-
-[0.1, 2.0, 100, 400, 404, '*', '/', '/book/{symbol}', '/docs', '/orders', '/stats', '/ws/market', '0.10', '1.0.0', 'AAPL', 'BUY', 'GOOGL', 'MSFT', 'Order not found', 'Trading Exchange API', 'books', 'cancelled', 'docs', 'mid_price', 'name', 'order', 'order_cancelled', 'order_id', 'order_submitted', 'pong', 'price', 'quantity', 'running', 'side', 'spread', 'stats', 'stats_update', 'status', 'symbol', 'timestamp', 'total_ask_quantity', 'total_bid_quantity', 'total_trades', 'total_volume', 'type', 'user_id', 'version']

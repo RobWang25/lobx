@@ -1,4 +1,0 @@
-# file: /Users/robertwang/Downloads/School/Intermediate Python/python-market-project/lobx/models.py
-# hypothesis_version: 6.141.1
-
-['BUY', 'CANCELLED', 'CANCEL_ORDER', 'Event', 'FILLED', 'MODIFY_ORDER', 'NEW_ORDER', 'OPEN', 'Order', 'PARTIAL', 'SELL', 'TRADE', 'Trade', 'buy_order_id', 'buyer_user_id', 'event_type', 'order_id', 'payload', 'price', 'quantity', 'sell_order_id', 'seller_user_id', 'sequence', 'side', 'status', 'symbol', 'timestamp', 'trade_id', 'user_id']
