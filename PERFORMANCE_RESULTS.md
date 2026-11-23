@@ -46,7 +46,7 @@ Before these changes, the C++-backed engine took 2.8 µs per operation on `mixed
 | `mixed` | 356,988 | 557,414 | +56% |
 | `cancel_heavy` | 394,262 | 687,297 | +74% |
 
-The engine's own bookkeeping now dominates: per operation, it takes a lock, reads the clock twice and appends to two latency lists. That code is shared with the Python backend, so it wasn't changed here.
+The engine's own bookkeeping now dominates: per operation, it takes a lock, reads the clock twice and records the latency. It used to append each latency to two lists that grew without limit, which leaked memory in a long-running server. It now records once into a window of the most recent 100,000 (`TradingEngine(latency_window=...)`). A later run with that change measured 462,577, 572,244 and 676,508 ops/sec on the cpp backend (`phase5-bounded-latency-py3.14.json`), within run-to-run noise of the figures above.
 
 ### Latency through the engine
 
@@ -115,7 +115,7 @@ cmake --build build/cpp-release
 ```
 
 ```bash
-LOBX_BACKEND=cpp .venv/bin/python bench/run_baseline.py --label my-cpp-run
+.venv/bin/python bench/run_baseline.py --backend cpp --label my-cpp-run
 ```
 
 ```bash
@@ -216,7 +216,7 @@ Only compare numbers measured in the same session. The same `deque` engine ran `
 ```
 
 ```bash
-.venv/bin/python bench/run_baseline.py --label my-run
+.venv/bin/python bench/run_baseline.py --backend python --label my-run
 ```
 
 ---

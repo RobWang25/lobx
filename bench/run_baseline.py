@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Replay the seeded workloads through the Python engine and record a baseline.
+Replay the seeded workloads through TradingEngine and record a baseline.
+
+The backend is the engine's default (cpp once built) unless --backend or
+LOBX_BACKEND picks one. Each results file records which backend it measured.
 
 This measures in-process TradingEngine calls only. Orders are built before the
 clock starts, and HTTP, JSON and WebSockets are not involved.
@@ -31,7 +34,7 @@ REPO_ROOT = HERE.parent
 sys.path.append(str(REPO_ROOT))  # appended, so PYTHONPATH can select another lobx
 
 import lobx  # noqa: E402
-from lobx.engine import TradingEngine  # noqa: E402
+from lobx.engine import BACKENDS, TradingEngine, resolve_backend  # noqa: E402
 from lobx.models import Order, Side  # noqa: E402
 
 SYMBOL = "BENCH"
@@ -61,9 +64,9 @@ def load_ops(path):
     return ops
 
 
-def replay(ops, enable_logging):
+def replay(ops, enable_logging, backend=None):
     """Run every operation once, returning the engine, outcomes and timings."""
-    engine = TradingEngine(enable_logging=enable_logging)
+    engine = TradingEngine(enable_logging=enable_logging, backend=backend)
     outcomes = [None] * len(ops)
     latencies = [0] * len(ops)
     clock = time.perf_counter_ns
@@ -136,7 +139,7 @@ def summarize(ops, outcomes, engine, latencies, elapsed):
     }
 
 
-def run_workload(name, expected_sha256, repeats, enable_logging):
+def run_workload(name, expected_sha256, repeats, enable_logging, backend):
     """Run a workload repeatedly and return the run with the median throughput."""
     path = HERE / "workloads" / f"{name}.txt"
     if not path.exists() or hashlib.sha256(path.read_bytes()).hexdigest() != expected_sha256:
@@ -145,7 +148,7 @@ def run_workload(name, expected_sha256, repeats, enable_logging):
     ops = load_ops(path)
     runs = []
     for _ in range(repeats):
-        engine, outcomes, latencies, elapsed = replay(ops, enable_logging)
+        engine, outcomes, latencies, elapsed = replay(ops, enable_logging, backend)
         runs.append(summarize(ops, outcomes, engine, latencies, elapsed))
         del engine, outcomes, latencies
 
@@ -178,11 +181,15 @@ def main():
     parser.add_argument("--label", required=True, help="results file name, without extension")
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--logging-modes", default="off,on", help="comma-separated: off, on")
+    parser.add_argument("--backend", choices=BACKENDS, help="default: LOBX_BACKEND, then cpp if built")
     args = parser.parse_args()
+    backend = resolve_backend(args.backend)
+    print(f"backend: {backend}", flush=True)
 
     manifest = json.loads((HERE / "workload_manifest.json").read_text())
     results = {
         "python": platform.python_version(),
+        "backend": backend,
         "machine": cpu_name(),
         "lobx_source_sha256": lobx_source_hash(),
         "repeats": args.repeats,
@@ -191,7 +198,7 @@ def main():
 
     for name, entry in manifest.items():
         for mode in args.logging_modes.split(","):
-            summary = run_workload(name, entry["sha256"], args.repeats, mode == "on")
+            summary = run_workload(name, entry["sha256"], args.repeats, mode == "on", backend)
             results["workloads"].setdefault(name, {})[f"logging_{mode}"] = summary
             latency = summary["latency_us"]
             print(

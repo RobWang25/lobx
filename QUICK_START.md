@@ -80,8 +80,9 @@ TradingEngine(
     event_callback=None,      # Async event callback
     use_async=False,          # Leave off: async matching doesn't work
     enable_profiling=False,   # Performance profiling
-    backend=None,             # "python" or "cpp", defaults to LOBX_BACKEND, then "python"
-    self_trade_prevention=True
+    backend=None,             # "python" or "cpp", defaults to LOBX_BACKEND, then "cpp" if built, else "python"
+    self_trade_prevention=True,
+    latency_window=100_000,   # Recent submit latencies kept for statistics
 )
 ```
 

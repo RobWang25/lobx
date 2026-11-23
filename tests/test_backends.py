@@ -29,9 +29,21 @@ def make_order(order_id, user, side, price, quantity, timestamp=NOW):
 
 
 class TestChoosingABackend:
-    def test_defaults_to_python(self, monkeypatch):
+    @needs_core
+    def test_defaults_to_cpp_when_built(self, monkeypatch):
         monkeypatch.delenv("LOBX_BACKEND", raising=False)
-        assert resolve_backend() == "python"
+        assert resolve_backend() == "cpp"
+        assert TradingEngine(enable_logging=False).backend == "cpp"
+
+    def test_falls_back_to_python_without_the_core(self, monkeypatch):
+        monkeypatch.delenv("LOBX_BACKEND", raising=False)
+        monkeypatch.setattr(engine_module._native, "AVAILABLE", False)
+        with pytest.warns(RuntimeWarning, match="isn't built"):
+            assert resolve_backend() == "python"
+
+    def test_async_without_a_choice_uses_python(self, monkeypatch):
+        monkeypatch.delenv("LOBX_BACKEND", raising=False)
+        assert TradingEngine(enable_logging=False, use_async=True).backend == "python"
 
     @needs_core
     def test_reads_the_environment(self, monkeypatch):

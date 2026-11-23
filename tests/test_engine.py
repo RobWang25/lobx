@@ -232,6 +232,25 @@ class TestStatistics:
         stats = engine.get_statistics()
         assert stats["total_orders_submitted"] == 0
         assert len(engine.latencies) == 0
+        assert stats["operation_latencies"]["submit_order"] is None
+
+    def test_latency_history_is_bounded(self):
+        """Only the most recent latency_window latencies are kept."""
+        engine = TradingEngine(enable_logging=False, latency_window=10)
+        for i in range(25):
+            engine.submit_order(Order(
+                f"O{i}", f"u{i}", "TEST", Side.BUY, Decimal("100.00"), 1, datetime.now()))
+        latest = engine.latencies[-1]
+
+        stats = engine.get_statistics()
+        assert stats["total_orders_submitted"] == 25
+        assert len(engine.latencies) == 10
+        assert stats["operation_latencies"]["submit_order"]["count"] == 10
+        assert stats["latency"]["max_ms"] >= latest  # Statistics use the same window
+
+    def test_latency_window_must_be_positive(self):
+        with pytest.raises(ValueError, match="window"):
+            TradingEngine(enable_logging=False, latency_window=0)
 
 
 class TestBookQueries:

@@ -1,7 +1,7 @@
 """
 An order book backed by the C++ core, with the same interface as OrderBook.
 
-TradingEngine uses this when LOBX_BACKEND=cpp. It matches and rests orders in
+TradingEngine uses this on the cpp backend, the default once the C++ core is built. It matches and rests orders in
 one call (submit), instead of going through MatchingEngine.
 
 Differences from the Python backend:

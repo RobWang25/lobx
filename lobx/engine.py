@@ -3,6 +3,7 @@ Main trading engine coordinating order books and matching.
 """
 import asyncio
 import os
+import warnings
 from threading import Lock
 import time
 
@@ -21,12 +22,19 @@ BACKENDS = ("python", "cpp")
 
 def resolve_backend(backend: str | None = None) -> str:
     """
-    Pick the matching backend: the argument if given, else LOBX_BACKEND, else python.
+    Pick the matching backend: the argument if given, else LOBX_BACKEND, else cpp.
 
-    Raises ValueError for an unknown name, and RuntimeError if cpp is chosen but
-    the C++ core isn't built.
+    With no choice made, cpp is used if the C++ core is built. If it isn't, this
+    warns and falls back to python. Raises ValueError for an unknown name, and
+    RuntimeError if cpp is chosen explicitly but the core isn't built.
     """
-    name = (backend or os.environ.get("LOBX_BACKEND") or "python").strip().lower()
+    chosen = backend or os.environ.get("LOBX_BACKEND")
+    if not chosen:
+        if _native.AVAILABLE:
+            return "cpp"
+        warnings.warn(f"Using the python backend. {BUILD_HINT}", RuntimeWarning, stacklevel=3)
+        return "python"
+    name = chosen.strip().lower()
     if name not in BACKENDS:
         raise ValueError(f"Unknown backend {name!r}, expected one of {', '.join(BACKENDS)}")
     if name == "cpp" and not _native.AVAILABLE:
@@ -54,6 +62,7 @@ class TradingEngine:
         enable_profiling: bool = False,
         backend: str | None = None,
         self_trade_prevention: bool = True,
+        latency_window: int = 100_000,
     ):
         """
         Initialize trading engine.
@@ -64,10 +73,15 @@ class TradingEngine:
             use_async: Use async matching engine
             enable_profiling: Enable performance profiling
             backend: "python" or "cpp". Defaults to the LOBX_BACKEND environment
-                variable, then "python".
+                variable, then "cpp" if the C++ core is built, else "python".
+                With use_async and no backend chosen, it's "python".
             self_trade_prevention: Cancel a resting order instead of letting its
                 user trade with themselves
+            latency_window: How many recent submit latencies to keep for the
+                latency statistics. Older ones are dropped.
         """
+        if use_async and not (backend or os.environ.get("LOBX_BACKEND")):
+            backend = "python"  # The only backend the async engine works with
         self.backend = resolve_backend(backend)
         if self.backend == "cpp" and use_async:
             raise ValueError("The async matching engine only works with the python backend")
@@ -96,12 +110,14 @@ class TradingEngine:
         self.total_trades_executed = 0
         self.start_time = time.time()
         
-        # Latency tracking
-        self.latencies = []
+        # Latency tracking. latencies holds the most recent submit latencies in
+        # ms. It's the tracker's own "submit_order" series, so each submit
+        # records once and memory stays bounded in a long-running server.
+        self.latency_tracker = LatencyTracker(window=latency_window)
+        self.latencies = self.latency_tracker.series('submit_order')
         
         # Performance profiling
         self.profiler = PerformanceProfiler() if enable_profiling else None
-        self.latency_tracker = LatencyTracker()
         if enable_profiling and self.profiler:
             self.profiler.enable()
 
@@ -182,8 +198,7 @@ class TradingEngine:
         
         # Track latency
         latency = (time.perf_counter() - start_time) * 1000  # ms
-        self.latencies.append(latency)
-        self.latency_tracker.record('submit_order', latency)
+        self.latencies.append(latency)  # Also records it in latency_tracker
 
         if self.event_callback:
             asyncio.create_task(self.event_callback('order_submitted', order))
@@ -247,7 +262,7 @@ class TradingEngine:
         """
         uptime = time.time() - self.start_time
         
-        # Calculate latency percentiles
+        # Latency percentiles over the most recent latency_window submits
         latency_stats = {}
         if self.latencies:
             sorted_lat = sorted(self.latencies)
@@ -316,7 +331,7 @@ class TradingEngine:
         self.total_orders_rejected = 0
         self.total_trades_executed = 0
         self.start_time = time.time()
-        self.latencies = []
+        self.latency_tracker.reset()  # Clears latencies too
     
     def get_event_log(self) -> list | None:
         """Get event log for replay."""

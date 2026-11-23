@@ -5,6 +5,7 @@ import cProfile
 import pstats
 import io
 import time
+from collections import deque
 from functools import wraps
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -141,18 +142,29 @@ class LatencyTracker:
     """
     Simple latency tracker for identifying hot paths.
     
-    Lightweight alternative to full profiling.
+    Lightweight alternative to full profiling. Keeps only the most recent
+    `window` measurements per operation, so memory stays bounded however long
+    it runs, and statistics describe recent behaviour.
     """
     
-    def __init__(self, percentiles=(50, 95, 99)):
+    def __init__(self, percentiles=(50, 95, 99), window: int = 100_000):
+        if window < 1:
+            raise ValueError("window must be at least 1")
         self.percentiles = percentiles
-        self.measurements = {}
+        self.window = window
+        self.measurements: dict[str, deque] = {}
+    
+    def series(self, operation: str) -> deque:
+        """The measurements kept for an operation, oldest first. Appending to it records one."""
+        values = self.measurements.get(operation)
+        if values is None:
+            # A full deque drops its oldest item on each append, in O(1).
+            values = self.measurements[operation] = deque(maxlen=self.window)
+        return values
     
     def record(self, operation: str, latency_ms: float):
         """Record a latency measurement"""
-        if operation not in self.measurements:
-            self.measurements[operation] = []
-        self.measurements[operation].append(latency_ms)
+        self.series(operation).append(latency_ms)
     
     def get_stats(self, operation: str = None):
         """
@@ -195,4 +207,7 @@ class LatencyTracker:
     
     def reset(self):
         """Reset all measurements"""
-        self.measurements.clear()
+        # Clear each deque rather than the dict, so anyone holding a series keeps
+        # recording into the tracker.
+        for values in self.measurements.values():
+            values.clear()
