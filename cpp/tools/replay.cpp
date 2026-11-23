@@ -5,6 +5,7 @@
 // to stderr. It's a rough figure: Phase 4 measures this properly.
 //
 //   lobx_replay bench/workloads/mixed.txt > results.txt
+//   lobx_replay --ladder map bench/workloads/mixed.txt > results.txt
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
@@ -69,16 +70,18 @@ struct TradeLog {
     void on_self_trade_cancel(OrderId) {}
 };
 
+template <typename Book>
 struct Run {
-    OrderBook book;
+    Book book;
     TradeLog log;
     std::vector<std::size_t> trades_after;  // Trade count after each operation
     std::vector<bool> cancel_results;
     double seconds;
 };
 
-Run replay(const std::vector<Operation>& operations) {
-    Run run{OrderBook{}, {}, {}, {}, 0.0};
+template <typename Book>
+Run<Book> replay(const std::vector<Operation>& operations) {
+    Run<Book> run{Book{}, {}, {}, {}, 0.0};
     run.log.trades.reserve(operations.size());
     run.trades_after.resize(operations.size());
     run.cancel_results.resize(operations.size());
@@ -99,7 +102,8 @@ Run replay(const std::vector<Operation>& operations) {
     return run;
 }
 
-void print_side(const OrderBook& book, Side side, char tag, std::ostream& out) {
+template <typename Book>
+void print_side(const Book& book, Side side, char tag, std::ostream& out) {
     for (const LevelView& level : book.depth(side, book.stats().active_orders)) {
         out << "L " << tag << ' ' << level.price / kUnitsPerCent;
         for (const OrderView& order : book.orders_at(side, level.price)) {
@@ -109,7 +113,9 @@ void print_side(const OrderBook& book, Side side, char tag, std::ostream& out) {
     }
 }
 
-void print_results(const std::vector<Operation>& operations, const Run& run, std::ostream& out) {
+template <typename Book>
+void print_results(const std::vector<Operation>& operations, const Run<Book>& run,
+                   std::ostream& out) {
     std::size_t next_trade = 0;
     for (std::size_t i = 0; i < operations.size(); ++i) {
         if (operations[i].is_cancel) {
@@ -125,29 +131,39 @@ void print_results(const std::vector<Operation>& operations, const Run& run, std
     print_side(run.book, Side::Sell, 'S', out);
 }
 
+// Replays kRuns times and prints the median speed, then the last run's results.
+template <typename Book>
+void run_all(const std::vector<Operation>& operations) {
+    std::vector<double> rates;
+    for (int i = 0; i < kRuns - 1; ++i) {
+        rates.push_back(static_cast<double>(operations.size()) / replay<Book>(operations).seconds);
+    }
+    const Run<Book> last = replay<Book>(operations);
+    rates.push_back(static_cast<double>(operations.size()) / last.seconds);
+
+    std::sort(rates.begin(), rates.end());
+    std::cerr << static_cast<std::int64_t>(rates[rates.size() / 2]) << " ops/sec, "
+              << last.log.trades.size() << " trades\n";
+
+    print_results(operations, last, std::cout);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
-        std::cerr << "usage: lobx_replay <workload file>\n";
+    const std::string ladder = argc == 4 && std::string(argv[1]) == "--ladder" ? argv[2] : "vector";
+    if ((argc != 2 && argc != 4) || (ladder != "vector" && ladder != "map")) {
+        std::cerr << "usage: lobx_replay [--ladder vector|map] <workload file>\n";
         return 2;
     }
 
     try {
-        const std::vector<Operation> operations = load(argv[1]);
-
-        std::vector<double> rates;
-        for (int i = 0; i < kRuns - 1; ++i) {
-            rates.push_back(static_cast<double>(operations.size()) / replay(operations).seconds);
+        const std::vector<Operation> operations = load(argv[argc - 1]);
+        if (ladder == "map") {
+            run_all<MapOrderBook>(operations);
+        } else {
+            run_all<OrderBook>(operations);
         }
-        const Run last = replay(operations);
-        rates.push_back(static_cast<double>(operations.size()) / last.seconds);
-
-        std::sort(rates.begin(), rates.end());
-        std::cerr << static_cast<std::int64_t>(rates[rates.size() / 2]) << " ops/sec, "
-                  << last.log.trades.size() << " trades\n";
-
-        print_results(operations, last, std::cout);
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << '\n';
         return 1;

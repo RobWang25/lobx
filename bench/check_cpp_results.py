@@ -6,6 +6,7 @@ Each workload's output from cpp/tools/replay.cpp must hash to the result_sha256
 recorded by bench/run_baseline.py. Build the C++ tools first, then run:
 
     python bench/check_cpp_results.py build/cpp-release/lobx_replay
+    python bench/check_cpp_results.py build/cpp-release/lobx_replay --ladder map
 """
 import hashlib
 import json
@@ -18,15 +19,16 @@ PYTHON_RESULTS = HERE / "results" / "cancel-o1-py3.14.json"
 
 
 def main():
-    if len(sys.argv) != 2:
+    if len(sys.argv) not in (2, 4):
         sys.exit(__doc__)
     replay = sys.argv[1]
+    options = sys.argv[2:]  # Passed through, e.g. --ladder map
 
     python_results = json.loads(PYTHON_RESULTS.read_text())["workloads"]
     all_match = True
     for name, modes in python_results.items():
         run = subprocess.run(
-            [replay, str(HERE / "workloads" / f"{name}.txt")],
+            [replay, *options, str(HERE / "workloads" / f"{name}.txt")],
             capture_output=True,
             check=True,
         )

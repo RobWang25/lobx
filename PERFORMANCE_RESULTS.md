@@ -1,12 +1,112 @@
 # Performance Results
 
-## Current Baseline
+## C++ Port
 
-These numbers are the comparison point for the C++ port. They measure in-process `TradingEngine` calls on an Apple M3 Pro. Orders are built before the clock starts, so HTTP, JSON and WebSockets are not included. Each figure is the median of 3 runs of 200,000 operations, and the runner's per-operation timers add a small overhead.
+Measured on an Apple M3 Pro with Python 3.14, all in one session, with a load average of about 3 to 4. Each figure is the median of 3 runs over the same 200,000-operation workloads used below. Every engine run reproduced the recorded result hashes on both backends.
+
+### Throughput by layer
+
+Operations per second. Each layer adds one step on top of the one above it.
+
+| Layer | `deep_book` | `mixed` | `cancel_heavy` |
+|-------|------------:|--------:|---------------:|
+| C++ core, sorted-vector ladder | 2,534,929 | 21,911,446 | 34,026,784 |
+| C++ core, `std::map` ladder | 9,581,116 | 11,804,795 | 31,020,415 |
+| Python calling `lobx._core` directly | 1,885,316 | 5,577,822 | 8,188,527 |
+| `TradingEngine`, cpp backend | 366,838 | 356,988 | 394,262 |
+| `TradingEngine`, python backend | 343,850 | 176,780 | 492,686 |
+
+- **C++ core:** measured with Google Benchmark (`build/cpp-release/lobx_bench`), with no Python involved.
+- **`lobx._core` directly:** IDs and prices are converted to integers before the clock starts, so this is the cost of crossing into C++ and building the returned Python objects.
+- **`TradingEngine`:** `Order` objects are built before the clock starts and event logging is off, as in the baseline below. No per-operation timers.
+
+The full engine is only 1 to 2 times faster on the C++ backend, and slower on `cancel_heavy`, even though the core alone is 7 to 124 times faster than the Python engine, depending on the workload. On `mixed`, the C++ core takes about 0.05 µs per operation and the C++-backed engine about 2.8 µs. The rest is Python around the core: converting each `Decimal` price and timestamp, building `Trade` objects, the engine's own bookkeeping and lock, and for each cancel, building the cancelled `Order` twice. No single function dominates.
+
+### Latency through the engine
+
+`bench/run_baseline.py` on each backend. Its per-operation timers add a little to every figure.
+
+| Workload | Backend | Ops/sec, logging off | p50 | p99 | Ops/sec, logging on |
+|----------|---------|---------------------:|----:|----:|--------------------:|
+| `deep_book` | python | 327,466 | 1.67 µs | 20.12 µs | 187,021 |
+| `deep_book` | cpp | 345,846 | 2.04 µs | 8.33 µs | 188,749 |
+| `mixed` | python | 170,465 | 1.92 µs | 26.25 µs | 112,270 |
+| `mixed` | cpp | 322,469 | 1.96 µs | 8.79 µs | 162,652 |
+| `cancel_heavy` | python | 485,206 | 1.50 µs | 14.00 µs | 257,370 |
+| `cancel_heavy` | cpp | 386,588 | 2.21 µs | 5.46 µs | 226,117 |
+
+The C++ backend's main gain here is tail latency. Its p99 is 2.4 to 3 times lower on every workload, because matching an order that trades against several levels no longer costs Python work per level. Its p50 is slightly higher, because every operation pays the conversion cost.
+
+### Through HTTP
+
+The first 3,000 operations of `mixed`, sent as `POST /orders` and `DELETE /orders/...` requests through uvicorn, one at a time from one client. Access logs were off, and event logging was on, as the API runs by default.
+
+| Backend | Requests/sec | p50 | p99 |
+|---------|-------------:|----:|----:|
+| python | 2,045 | 470 µs | 883 µs |
+| cpp | 2,058 | 465 µs | 680 µs |
+
+Each request takes about 470 µs, and the engine accounts for about 3 to 6 µs of that, around 1%. FastAPI, request validation, JSON and the network stack account for nearly all of it, so the backend barely changes API throughput. The lower p99 on C++ is consistent with the engine results, but at this sample size it's a hint rather than a firm result.
+
+### Sorted vector or `std::map` for the price ladder
+
+The book keeps each side's prices in a ladder, chosen as a template argument (`cpp/include/lobx/ladder.hpp`). Both ladders produce identical results.
+
+Google Benchmark, nanoseconds per operation, median of 3:
+
+| Operation | Levels or orders | Vector | `std::map` |
+|-----------|-----------------:|-------:|-----------:|
+| Add and remove a level below the worst price | 10 | 14.6 | 19.9 |
+| | 1,000 | 204.8 | 47.2 |
+| | 100,000 | 24,633.3 | 85.6 |
+| Add and remove a level above the best price | 10 | 8.5 | 20.2 |
+| | 1,000 | 12.6 | 32.8 |
+| | 100,000 | 19.8 | 56.3 |
+| Cancel from the middle of one price's queue | 10 | 9.8 | 10.4 |
+| | 10,000 | 11.4 | 11.0 |
+| Rest an order, then fill it | 100,000 on the other side | 14.3 | 30.7 |
+
+- **The vector** is 2 to 3 times faster near the best price, where most activity happens, because its entries are contiguous and removing the best level is a `pop_back`. A level far from the best costs O(L), since every later entry shifts: 25 µs at 100,000 levels.
+- **`std::map`** costs O(log L) anywhere, but each new level allocates a tree node, and following pointers is slower than scanning memory.
+- **Queue position doesn't matter** for either: cancelling from the middle of a 10,000-order queue costs the same as from a 10-order one, because of the linked list.
+
+This explains `deep_book`. It starts by inserting 40,000 one-order levels in shuffled order, and 15% of the later operations cancel a random resting order, often emptying a level far from the best price. Timed separately, building those 40,000 levels took 47.7 ms with the vector and 6.3 ms with `std::map`. The remaining 160,000 operations took 28.2 ms and 12.3 ms.
+
+The vector stays the default. Realistic books concentrate activity near the best price, where it's faster, and `mixed` runs 1.9 times faster with it. A book with many levels and frequent changes far from the best price would suit `std::map` better.
+
+### Reproducing
+
+```bash
+cmake -S cpp -B build/cpp-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+```
+
+```bash
+cmake --build build/cpp-release
+```
+
+```bash
+.venv2/bin/python bench/bench_layers.py --label my-run
+```
+
+```bash
+LOBX_BACKEND=cpp .venv2/bin/python bench/run_baseline.py --label my-cpp-run
+```
+
+```bash
+./build/cpp-release/lobx_bench
+```
+
+Results from this session are in `bench/results/phase4-*.json`.
+
+---
+
+## Python Baseline
+
+These numbers were the comparison point for the C++ port, from the session before it. They measure in-process `TradingEngine` calls on an Apple M3 Pro. Orders are built before the clock starts, so HTTP, JSON and WebSockets are not included. Each figure is the median of 3 runs of 200,000 operations, and the runner's per-operation timers add a small overhead.
 
 Logging is on by default in `TradingEngine`, and the API runs with it on.
 
-### Python 3.14.2
+### Python 3.14.2, python backend
 
 | Workload | Ops/sec, logging off | p50 | p99 | Ops/sec, logging on | Trades |
 |----------|---------------------:|----:|----:|--------------------:|-------:|

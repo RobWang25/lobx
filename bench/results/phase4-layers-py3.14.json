@@ -1,0 +1,51 @@
+{
+  "python": "3.14.2",
+  "machine": "Apple M3 Pro",
+  "lobx_source_sha256": "30f0ca926552f311bc2edfb1b290a9b49f5a19924d2f5dd79faf2c85391f1acf",
+  "workload_sha256": {
+    "deep_book": "5440aef1a93357444aaf1a982c20b723aec1d9e023d798a81bba41ff5545f3b3",
+    "mixed": "2929e4c5911e26d127a68a7e44097386494eae935691add6dff69b4f833ef04b",
+    "cancel_heavy": "8b081efcd9fc7ca56a0ff5e3e2d8614c0b6945954ab8bc71cbfd472bb5e4db89"
+  },
+  "rounds": 3,
+  "http_ops": 3000,
+  "ops_per_sec": {
+    "core vector": {
+      "deep_book": 2534929,
+      "mixed": 21911446,
+      "cancel_heavy": 34026784
+    },
+    "core map": {
+      "deep_book": 9581116,
+      "mixed": 11804795,
+      "cancel_heavy": 31020415
+    },
+    "binding": {
+      "deep_book": 1885316,
+      "mixed": 5577822,
+      "cancel_heavy": 8188527
+    },
+    "engine cpp": {
+      "deep_book": 366838,
+      "mixed": 356988,
+      "cancel_heavy": 394262
+    },
+    "engine python": {
+      "deep_book": 343850,
+      "mixed": 176780,
+      "cancel_heavy": 492686
+    }
+  },
+  "http": {
+    "http python": {
+      "ops_per_sec": 2044.6,
+      "p50_us": 469.7,
+      "p99_us": 883.1
+    },
+    "http cpp": {
+      "ops_per_sec": 2057.5,
+      "p50_us": 465.2,
+      "p99_us": 680.5
+    }
+  }
+}
