@@ -136,12 +136,17 @@ async def lifespan(app: FastAPI):
     broadcaster_task = asyncio.create_task(broadcast_events())
     background_tasks.append(broadcaster_task)
     
-    yield
-    
-    # Shutdown
-    for task in background_tasks:
-        task.cancel()
-    await asyncio.gather(*background_tasks, return_exceptions=True)
+    try:
+        yield
+    finally:
+        for task in background_tasks:
+            task.cancel()
+        try:
+            await asyncio.gather(*background_tasks, return_exceptions=True)
+        finally:
+            background_tasks.clear()
+            noise_traders.clear()
+            market_maker = None
 
 
 app = FastAPI(
@@ -183,7 +188,9 @@ async def broadcast_events():
 async def submit_order(order_req: OrderRequest):
     """Submit a new limit order"""
     try:
-        side = Side.BUY if order_req.side.upper() == "BUY" else Side.SELL
+        side = Side(order_req.side.upper())
+        if order_req.quantity != order_req.quantity.to_integral_value():
+            raise ValueError("Quantity must be a whole number")
         
         # Create Order object
         order = Order(
@@ -253,28 +260,15 @@ async def get_order_book(symbol: str, depth: int = 10):
         if not book:
             raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found")
         
-        # Aggregate by price level
-        bid_levels = {}
-        for price, orders in book.bids.items():
-            total_qty = sum(o.quantity for o in orders.values())
-            bid_levels[price] = BookLevel(
-                price=price,
-                quantity=Decimal(total_qty),
-                order_count=len(orders)
-            )
-        
-        ask_levels = {}
-        for price, orders in book.asks.items():
-            total_qty = sum(o.quantity for o in orders.values())
-            ask_levels[price] = BookLevel(
-                price=price,
-                quantity=Decimal(total_qty),
-                order_count=len(orders)
-            )
-        
-        # Sort and limit depth
-        sorted_bids = sorted(bid_levels.values(), key=lambda x: x.price, reverse=True)[:depth]
-        sorted_asks = sorted(ask_levels.values(), key=lambda x: x.price)[:depth]
+        # Best price first on each side, already limited to `depth` levels
+        sorted_bids = [
+            BookLevel(price=price, quantity=Decimal(quantity), order_count=count)
+            for price, quantity, count in book.get_levels(Side.BUY, depth)
+        ]
+        sorted_asks = [
+            BookLevel(price=price, quantity=Decimal(quantity), order_count=count)
+            for price, quantity, count in book.get_levels(Side.SELL, depth)
+        ]
         
         # Calculate spread and mid price
         spread = None

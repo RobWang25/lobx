@@ -2,7 +2,8 @@
 Main trading engine coordinating order books and matching.
 """
 import asyncio
-from typing import Dict, List, Optional
+import os
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
 from datetime import datetime
 from threading import Lock
 import time
@@ -13,6 +14,32 @@ from .matching import MatchingEngine
 from .async_matching import AsyncMatchingEngine
 from .replay import EventLogger
 from .profiler import PerformanceProfiler, LatencyTracker
+
+if TYPE_CHECKING:
+    from .native_book import NativeOrderBook
+
+
+BACKENDS = ("python", "cpp")
+
+
+def resolve_backend(backend: Optional[str] = None) -> str:
+    """
+    Pick the matching backend: the argument if given, else LOBX_BACKEND, else python.
+
+    Raises ValueError for an unknown name, and RuntimeError if cpp is chosen but
+    the C++ core isn't built.
+    """
+    name = (os.environ.get("LOBX_BACKEND", "python") if backend is None else backend).strip().lower()
+    if name not in BACKENDS:
+        raise ValueError(f"Unknown backend {name!r}, expected one of {', '.join(BACKENDS)}")
+    if name == "cpp":
+        from . import _native
+
+        if not _native.AVAILABLE:
+            from .native_book import BUILD_HINT
+
+            raise RuntimeError(BUILD_HINT)
+    return name
 
 
 class TradingEngine:
@@ -32,7 +59,9 @@ class TradingEngine:
         enable_logging: bool = True, 
         event_callback=None,
         use_async: bool = False,
-        enable_profiling: bool = False
+        enable_profiling: bool = False,
+        backend: Optional[str] = None,
+        self_trade_prevention: bool = True,
     ):
         """
         Initialize trading engine.
@@ -42,25 +71,36 @@ class TradingEngine:
             event_callback: Callback for trading events
             use_async: Use async matching engine
             enable_profiling: Enable performance profiling
+            backend: "python" or "cpp". Defaults to the LOBX_BACKEND environment
+                variable, then "python".
+            self_trade_prevention: Cancel a resting order instead of letting its
+                user trade with themselves
         """
-        self.books: Dict[str, OrderBook] = {}
+        self.backend = resolve_backend(backend)
+        if self.backend == "cpp" and use_async:
+            raise ValueError("The async matching engine only works with the python backend")
+        self.self_trade_prevention = self_trade_prevention
+        self.books: Dict[str, Union[OrderBook, "NativeOrderBook"]] = {}
         self.use_async = use_async
 
         # Submits and cancels run one at a time. Matching reads the best order and
         # then changes it, so another thread must not change the book in between.
         self._lock = Lock()
 
-        # Use async or sync matching engine
-        if use_async:
+        # The cpp backend matches inside NativeOrderBook, so it has no matching engine.
+        if self.backend == "cpp":
+            self.matching_engine = None
+        elif use_async:
             self.matching_engine = AsyncMatchingEngine()
         else:
-            self.matching_engine = MatchingEngine()
+            self.matching_engine = MatchingEngine(self_trade_prevention)
         
         self.event_logger = EventLogger() if enable_logging else None
         
         # Statistics
         self.total_orders_submitted = 0
         self.total_orders_cancelled = 0
+        self.total_orders_rejected = 0
         self.total_trades_executed = 0
         self.start_time = time.time()
         
@@ -104,26 +144,41 @@ class TradingEngine:
     
     def _submit_order_impl(self, order: Order, start_time: float) -> List[Trade]:
         """Internal submit order implementation"""
-        # Get or create book
-        if order.symbol not in self.books:
-            self.books[order.symbol] = OrderBook(order.symbol)
-        
-        book = self.books[order.symbol]
-        
-        # Match order
-        if self.profiler:
-            with self.profiler.measure_operation('match_order'):
-                trades, remaining_order = self.matching_engine.match_order(order, book)
-        else:
-            trades, remaining_order = self.matching_engine.match_order(order, book)
-        
-        # Add remaining order to book if not fully filled
-        if remaining_order.status != OrderStatus.FILLED:
+        book = self.books.get(order.symbol)
+        new_symbol = book is None
+        if new_symbol:
+            book = self._new_book(order.symbol)
+
+        # An order whose ID is already resting is rejected before matching, so it
+        # can't trade and then fail to rest.
+        if book.has_order(order.order_id):
+            self.total_orders_rejected += 1
+            return []
+
+        if self.backend == "cpp":
             if self.profiler:
-                with self.profiler.measure_operation('add_to_book'):
-                    book.add_order(remaining_order)
+                with self.profiler.measure_operation('match_order'):
+                    trades = book.submit(order)
             else:
-                book.add_order(remaining_order)
+                trades = book.submit(order)
+        else:
+            # Match order
+            if self.profiler:
+                with self.profiler.measure_operation('match_order'):
+                    trades, remaining_order = self.matching_engine.match_order(order, book)
+            else:
+                trades, remaining_order = self.matching_engine.match_order(order, book)
+
+            # Add remaining order to book if not fully filled
+            if remaining_order.status != OrderStatus.FILLED:
+                if self.profiler:
+                    with self.profiler.measure_operation('add_to_book'):
+                        book.add_order(remaining_order)
+                else:
+                    book.add_order(remaining_order)
+
+        if new_symbol:
+            self.books[order.symbol] = book
         
         # Log events
         if self.event_logger:
@@ -174,7 +229,14 @@ class TradingEngine:
 
             return False
     
-    def get_book(self, symbol: str) -> Optional[OrderBook]:
+    def _new_book(self, symbol: str):
+        if self.backend == "cpp":
+            from .native_book import NativeOrderBook
+
+            return NativeOrderBook(symbol, self.self_trade_prevention)
+        return OrderBook(symbol)
+
+    def get_book(self, symbol: str) -> Optional[Union[OrderBook, "NativeOrderBook"]]:
         """Get order book for symbol."""
         return self.books.get(symbol)
     
@@ -221,9 +283,11 @@ class TradingEngine:
             book_stats[symbol] = book.get_statistics()
         
         stats = {
+            "backend": self.backend,
             "uptime_seconds": uptime,
             "total_orders_submitted": self.total_orders_submitted,
             "total_orders_cancelled": self.total_orders_cancelled,
+            "total_orders_rejected": self.total_orders_rejected,
             "total_trades_executed": self.total_trades_executed,
             "orders_per_second": orders_per_sec,
             "trades_per_second": trades_per_sec,
@@ -261,6 +325,7 @@ class TradingEngine:
         """Reset statistics counters."""
         self.total_orders_submitted = 0
         self.total_orders_cancelled = 0
+        self.total_orders_rejected = 0
         self.total_trades_executed = 0
         self.start_time = time.time()
         self.latencies = []

@@ -31,6 +31,7 @@ REPO_ROOT = HERE.parent
 sys.path.append(str(REPO_ROOT))  # appended, so PYTHONPATH can select another lobx
 
 import lobx  # noqa: E402
+from lobx import engine as engine_module  # noqa: E402
 from lobx.engine import TradingEngine  # noqa: E402
 from lobx.models import Order, Side  # noqa: E402
 
@@ -63,7 +64,9 @@ def load_ops(path):
 
 def replay(ops, enable_logging):
     """Run every operation once, returning the engine, outcomes and timings."""
-    engine = TradingEngine(enable_logging=enable_logging)
+    # PYTHONPATH can point at a snapshot from before the backend switch.
+    options = {"backend": "python"} if hasattr(engine_module, "resolve_backend") else {}
+    engine = TradingEngine(enable_logging=enable_logging, **options)
     outcomes = [None] * len(ops)
     latencies = [0] * len(ops)
     clock = time.perf_counter_ns

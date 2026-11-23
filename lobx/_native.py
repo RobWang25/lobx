@@ -2,11 +2,12 @@
 Conversions between lobx's Python types and the C++ core's integers.
 
 The C++ core (lobx._core) only handles integers. Prices become whole units of
-0.0001, and string IDs become integers assigned in first-seen order.
+0.0001, timestamps become microseconds since 1970, and string IDs become integers.
 
 lobx._core is optional. It exists only after building the package with
 `pip install -e .` on Python 3.10 or newer, so check AVAILABLE first.
 """
+from datetime import datetime, timedelta
 from decimal import Context, Decimal, Inexact, InvalidOperation
 from importlib import import_module
 from typing import Dict, List
@@ -54,6 +55,21 @@ def price_to_units(price: Decimal) -> int:
     except Inexact:
         raise ValueError(f"Price {price} has more than {_PRICE_DECIMALS} decimal places") from None
     return int(context.scaleb(exact_price, _PRICE_DECIMALS))
+
+
+_EPOCH = datetime(1970, 1, 1)
+_MICROSECOND = timedelta(microseconds=1)
+
+
+def timestamp_to_micros(timestamp: datetime) -> int:
+    """Convert a naive datetime to whole microseconds since 1970, exactly."""
+    if timestamp.tzinfo is not None:
+        raise ValueError("The C++ backend needs naive timestamps, without a timezone")
+    return (timestamp - _EPOCH) // _MICROSECOND
+
+
+def micros_to_timestamp(micros: int) -> datetime:
+    return _EPOCH + timedelta(microseconds=micros)
 
 
 class IdMap:

@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Compare the C++ core (lobx._core) with the Python engine, operation by operation.
+Compare TradingEngine on the C++ and Python backends, operation by operation.
 
 Both engines get the same operations. After each one, the trades, the submit
 result and the cancel result must match, and every few operations the whole book
-must match too. Any difference stops the run and prints the operation.
+must match too, down to each resting Order. Any difference prints the operation.
 
     .venv/bin/python bench/differential.py random --ops 1000000
     .venv/bin/python bench/differential.py workloads
     .venv/bin/python bench/differential.py session
 
-Expected differences, which the generated operations avoid: C++ rejects a
-duplicate resting order ID before matching, and reports self-trade cancels.
+Trade comparisons cover IDs of the matched orders, users, prices and quantities.
+Book snapshots also check the effects of self-trade prevention.
 """
 import argparse
 import hashlib
@@ -28,36 +28,38 @@ REPO_ROOT = HERE.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from bench.check_cpp_results import PYTHON_RESULTS, load_expected_workloads  # noqa: E402
-from lobx._native import AVAILABLE, IdMap, _core, price_to_units  # noqa: E402
+from lobx._native import AVAILABLE, price_to_units  # noqa: E402
 from lobx.engine import TradingEngine  # noqa: E402
-from lobx.matching import MatchingEngine  # noqa: E402
 from lobx.models import Order, OrderStatus, Side  # noqa: E402
 
 SYMBOL = "DIFF"
 TIMESTAMP = datetime(2026, 1, 1)
-NO_LIMIT = 2**62  # "All levels" for depth()
 
 
 class Divergence(AssertionError):
     pass
 
 
-class PythonSide:
-    """The Python TradingEngine, reporting results in a form both sides share."""
+class EngineSide:
+    """A TradingEngine on one backend, reporting results in a form both backends share."""
 
-    def __init__(self, self_trade_prevention=True):
-        self.engine = TradingEngine(enable_logging=False)
-        self.engine.matching_engine = MatchingEngine(self_trade_prevention)
+    def __init__(self, backend, self_trade_prevention=True):
+        self.engine = TradingEngine(
+            enable_logging=False, backend=backend, self_trade_prevention=self_trade_prevention)
 
     def new(self, order_id, user, side, price, quantity):
         order = Order(order_id, user, SYMBOL, side, price, quantity, TIMESTAMP)
+        rejected_before = self.engine.total_orders_rejected
         trades = self.engine.submit_order(order)
-        resting = self.engine.get_book(SYMBOL).get_order(order_id)
-        status = resting.status.value if resting else OrderStatus.FILLED.value
-        remaining = resting.quantity if resting else 0
+        if self.engine.total_orders_rejected != rejected_before:
+            status, remaining = "REJECTED_DUPLICATE", 0
+        else:
+            resting = self.engine.get_order(order_id, SYMBOL)
+            status = resting.status.value if resting else OrderStatus.FILLED.value
+            remaining = resting.quantity if resting else 0
         return status, remaining, [
             (t.buy_order_id, t.sell_order_id, t.buyer_user_id, t.seller_user_id,
-             price_to_units(t.price), t.quantity)
+             t.price, t.quantity)
             for t in trades
         ]
 
@@ -65,60 +67,28 @@ class PythonSide:
         return self.engine.cancel_order(order_id, SYMBOL)
 
     def snapshot(self):
+        """Every resting Order, by side and price, best price first."""
         book = self.engine.get_book(SYMBOL)
-        result = {}
-        for side, levels, best_first in ((Side.BUY, book and book.bids, True),
-                                         (Side.SELL, book and book.asks, False)):
-            prices = sorted((p for p, q in (levels or {}).items() if q), reverse=best_first)
-            result[side] = [
-                (price_to_units(price), [
-                    (o.order_id, o.user_id, o.quantity, o.status == OrderStatus.PARTIAL)
-                    for o in book.get_orders_at_price(side, price)
-                ])
-                for price in prices
-            ]
-        return result
+        if book is None:
+            return {Side.BUY: [], Side.SELL: []}
+        return {
+            side: [(price, book.get_orders_at_price(side, price))
+                   for price, _, _ in book.get_levels(side)]
+            for side in (Side.BUY, Side.SELL)
+        }
+
+    @property
+    def self_trade_cancels(self):
+        book = self.engine.get_book(SYMBOL)
+        return book.get_statistics().get("self_trade_cancels", 0) if book else 0
 
 
-class CppSide:
-    """The C++ book behind lobx._core, with string IDs and Decimal prices converted."""
+def PythonSide(self_trade_prevention=True):
+    return EngineSide("python", self_trade_prevention)
 
-    def __init__(self, self_trade_prevention=True):
-        self.book = _core.OrderBook(self_trade_prevention)
-        self.order_ids = IdMap()
-        self.user_ids = IdMap()
-        self.sides = {Side.BUY: _core.Side.BUY, Side.SELL: _core.Side.SELL}
-        self.self_trade_cancels = 0
 
-    def new(self, order_id, user, side, price, quantity):
-        status, remaining, trades, cancels = self.book.submit(
-            self.order_ids.number(order_id), self.user_ids.number(user),
-            self.sides[side], price_to_units(price), quantity)
-        self.self_trade_cancels += len(cancels)
-        name = self.order_ids.name
-        user_name = self.user_ids.name
-        return status.name, remaining, [
-            (name(t.buy_order_id), name(t.sell_order_id), user_name(t.buyer),
-             user_name(t.seller), t.price, t.quantity)
-            for t in trades
-        ]
-
-    def cancel(self, order_id):
-        number = self.order_ids.lookup(order_id)
-        return number is not None and self.book.cancel(number)
-
-    def snapshot(self):
-        result = {}
-        for side, core_side in self.sides.items():
-            result[side] = [
-                (level.price, [
-                    (self.order_ids.name(o.id), self.user_ids.name(o.user), o.quantity,
-                     o.partially_filled)
-                    for o in self.book.orders_at(core_side, level.price)
-                ])
-                for level in self.book.depth(core_side, NO_LIMIT)
-            ]
-        return result
+def CppSide(self_trade_prevention=True):
+    return EngineSide("cpp", self_trade_prevention)
 
 
 def compare(ops, self_trade_prevention=True, snapshot_every=1):
@@ -195,7 +165,7 @@ def run_random(total_ops, seed):
 
 
 def workload_hash(path):
-    """Hash a workload's results from the C++ core, in bench/run_baseline.py's format."""
+    """Hash a workload's results from the C++ backend, in bench/run_baseline.py's format."""
     cpp = CppSide()
     digest = hashlib.sha256()
 
@@ -209,16 +179,16 @@ def workload_hash(path):
                 _, order_id, user, side, cents, quantity = fields
                 _, _, trades = cpp.new(order_id, user, Side.BUY if side == "B" else Side.SELL,
                                        Decimal(int(cents)).scaleb(-2), int(quantity))
-                for buy, sell, _, _, units, traded in trades:
-                    write(f"T {buy} {sell} {units // 100} {traded}")
+                for buy, sell, _, _, price, traded in trades:
+                    write(f"T {buy} {sell} {price_to_units(price) // 100} {traded}")
             else:
                 write(f"C {fields[1]} {int(cpp.cancel(fields[1]))}")
 
     snapshot = cpp.snapshot()
     for tag, side in (("B", Side.BUY), ("S", Side.SELL)):
-        for units, orders in snapshot[side]:
-            resting = " ".join(f"{order_id}:{quantity}" for order_id, _, quantity, _ in orders)
-            write(f"L {tag} {units // 100} {resting}")
+        for price, orders in snapshot[side]:
+            resting = " ".join(f"{order.order_id}:{order.quantity}" for order in orders)
+            write(f"L {tag} {price_to_units(price) // 100} {resting}")
     return digest.hexdigest()
 
 
@@ -257,7 +227,8 @@ def replay_session(path):
     replayed = []
     for op in ops:
         if op[0] == "new":
-            replayed += [(buy, sell, units, qty) for buy, sell, _, _, units, qty in cpp.new(*op[1:])[2]]
+            replayed += [(buy, sell, price_to_units(price), qty)
+                         for buy, sell, _, _, price, qty in cpp.new(*op[1:])[2]]
         else:
             cpp.cancel(op[1])
     return len(ops), replayed, logged_trades
