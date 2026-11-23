@@ -51,6 +51,39 @@ public:
                               nb::cast(sink_.self_trade_cancels));
     }
 
+    // The same as submit, shaped for NativeOrderBook so it does less work in Python.
+    // Returns (status, remaining, trades, removed):
+    //   trades   plain tuples (trade_id, buy_order_id, sell_order_id, buyer, seller,
+    //            price, quantity), which Python unpacks faster than Trade objects
+    //   removed  the resting orders this call took out of the book, either filled
+    //            completely or cancelled by self-trade prevention
+    nb::tuple submit_compact(OrderId id, UserId user, Side side, Price price, Quantity quantity,
+                             Timestamp timestamp) {
+        sink_.trades.clear();
+        sink_.self_trade_cancels.clear();
+        const SubmitResult result =
+            book_.submit(NewOrder{id, user, side, price, quantity, timestamp}, sink_);
+
+        nb::list trades;
+        nb::list removed;
+        for (const OrderId cancelled : sink_.self_trade_cancels) {
+            removed.append(cancelled);
+        }
+        const std::size_t count = sink_.trades.size();
+        for (std::size_t i = 0; i < count; ++i) {
+            const Trade& trade = sink_.trades[i];
+            trades.append(nb::make_tuple(trade.trade_id, trade.buy_order_id, trade.sell_order_id,
+                                         trade.buyer, trade.seller, trade.price, trade.quantity));
+            // Matching works through the queue in order, so every resting order but
+            // the last one traded with was used up. The last may still be resting.
+            const OrderId resting = side == Side::Buy ? trade.sell_order_id : trade.buy_order_id;
+            if (i + 1 < count || !book_.contains(resting)) {
+                removed.append(resting);
+            }
+        }
+        return nb::make_tuple(result.status, result.remaining, trades, removed);
+    }
+
     // Exposes the wrapped book for the read-only methods.
     const OrderBook& book() const { return book_; }
     OrderBook& book() { return book_; }
@@ -122,6 +155,8 @@ NB_MODULE(_core, m) {
         .def(nb::init<bool>(), "self_trade_prevention"_a = true)
         .def("submit", &PyOrderBook::submit, "order_id"_a, "user_id"_a, "side"_a, "price"_a,
              "quantity"_a, "timestamp"_a = 0)
+        .def("submit_compact", &PyOrderBook::submit_compact, "order_id"_a, "user_id"_a, "side"_a,
+             "price"_a, "quantity"_a, "timestamp"_a = 0)
         .def("cancel", [](PyOrderBook& self, OrderId id) { return self.book().cancel(id); },
              "order_id"_a)
         .def("best_bid", [](const PyOrderBook& self) { return self.book().best_bid(); })
@@ -131,6 +166,9 @@ NB_MODULE(_core, m) {
              [](const PyOrderBook& self, Side side) { return self.book().peek_best(side); },
              "side"_a)
         .def("find", [](const PyOrderBook& self, OrderId id) { return self.book().find(id); },
+             "order_id"_a)
+        .def("contains",
+             [](const PyOrderBook& self, OrderId id) { return self.book().contains(id); },
              "order_id"_a)
         .def("orders_at",
              [](const PyOrderBook& self, Side side, Price price) {

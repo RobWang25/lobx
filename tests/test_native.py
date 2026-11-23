@@ -99,6 +99,26 @@ class TestBindings:
         status, _, trades, cancels = book.submit(2, 10, core.Side.BUY, 1_000_000, 5)
         assert (status, trades, cancels) == (core.SubmitStatus.OPEN, [], [1])
 
+    def test_submit_compact_reports_orders_that_left_the_book(self, core, book):
+        book.submit(1, 10, core.Side.SELL, 1_000_000, 3)
+        book.submit(2, 11, core.Side.SELL, 1_000_000, 5)
+        book.submit(3, 20, core.Side.SELL, 1_000_000, 5)  # Same user as the buyer below
+        book.submit(4, 12, core.Side.SELL, 1_000_000, 5)
+
+        # Buys 3 from order 1 and 5 from order 2, cancels order 3 as a self-trade,
+        # then buys the last 1 from order 4.
+        status, remaining, trades, removed = book.submit_compact(
+            5, 20, core.Side.BUY, 1_000_000, 9)
+
+        assert (status, remaining) == (core.SubmitStatus.FILLED, 0)
+        # (trade_id, buy_order_id, sell_order_id, buyer, seller, price, quantity)
+        assert trades == [(1, 5, 1, 20, 10, 1_000_000, 3), (2, 5, 2, 20, 11, 1_000_000, 5),
+                          (3, 5, 4, 20, 12, 1_000_000, 1)]
+        # 1 and 2 were used up and 3 was a self-trade. 4 still rests with 4 left.
+        assert sorted(removed) == [1, 2, 3]
+        assert book.contains(4) and not book.contains(3)
+        assert book.find(4).quantity == 4
+
     def test_rejections(self, core, book):
         too_big = core.MAX_ORDER_QUANTITY + 1
         assert book.submit(1, 1, core.Side.BUY, 100, too_big)[0] == core.SubmitStatus.REJECTED_INVALID
@@ -167,3 +187,26 @@ class TestDifferential:
             Path(__file__).resolve().parent.parent / "example_session.jsonl")
         assert count == 13
         assert replayed == logged
+
+
+def test_build_trusted_matches_normal_construction():
+    import dataclasses
+    from datetime import datetime
+    from decimal import Decimal
+
+    from lobx.models import Order, OrderStatus, Side, Trade, build_trusted
+
+    stamp = datetime(2024, 1, 2, 9, 30)
+    for cls, values in [
+        (Order, dict(order_id="O1", user_id="u", symbol="X", side=Side.BUY,
+                     price=Decimal("1.50"), quantity=3, timestamp=stamp, status=OrderStatus.OPEN)),
+        (Trade, dict(trade_id="T1", symbol="X", buy_order_id="O1", sell_order_id="O2",
+                     price=Decimal("1.50"), quantity=3, timestamp=stamp,
+                     buyer_user_id="a", seller_user_id="b")),
+    ]:
+        normal, trusted = cls(**values), build_trusted(cls, dict(values))
+        assert trusted == normal and hash(trusted) == hash(normal)
+        assert repr(trusted) == repr(normal)
+        assert set(values) == {field.name for field in dataclasses.fields(cls)}
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            trusted.quantity = 4

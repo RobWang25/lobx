@@ -217,3 +217,22 @@ def generate_order_id() -> str:
 def generate_trade_id() -> str:
     """Generate unique trade ID."""
     return f"TRD-{uuid.uuid4().hex[:12].upper()}"
+
+
+_new_instance = object.__new__
+_set_attribute = object.__setattr__
+
+
+def build_trusted(cls, fields: dict):
+    """
+    Build an Order or Trade from values that are already known to be valid.
+
+    This skips __init__ and __post_init__, so it's about twice as fast as calling
+    the class, which matters on the C++ backend's hot path. fields must name every
+    field, defaults included. The result is an ordinary frozen instance: it compares,
+    hashes and refuses changes like one built normally.
+    """
+    instance = _new_instance(cls)
+    # A frozen dataclass blocks its own __setattr__, so go through object's.
+    _set_attribute(instance, "__dict__", fields)
+    return instance

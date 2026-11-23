@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
 from .book import BookQueries
-from .models import Order, OrderStatus, Side, Trade
+from .models import Order, OrderStatus, Side, Trade, build_trusted
 from ._native import (
     AVAILABLE,
     MAX_ORDER_QUANTITY,
@@ -28,6 +28,9 @@ from ._native import (
     timestamp_to_micros,
 )
 
+_REJECTED = (
+    (_core.SubmitStatus.REJECTED_INVALID, _core.SubmitStatus.REJECTED_DUPLICATE) if AVAILABLE else ()
+)
 BUILD_HINT = (
     "The C++ backend isn't built. On Python 3.10 or newer, run: "
     "python -m pip install --no-build-isolation -e ."
@@ -60,6 +63,10 @@ class NativeOrderBook(BookQueries):
         # The first Decimal seen for each price, so prices come back exactly as
         # they went in (Decimal("150.00"), not Decimal("150.0000")).
         self._prices: Dict[int, Decimal] = {}
+        # Each Decimal price's units, so a price is only converted the first time.
+        # Equal Decimals share an entry: Decimal("150.0") finds Decimal("150.00").
+        self._units: Dict[Decimal, int] = {}
+        self._trade_prefix = f"TRD-{symbol}-"
 
     # ---- Matching ----
 
@@ -74,54 +81,55 @@ class NativeOrderBook(BookQueries):
             raise ValueError(f"Order symbol {order.symbol} doesn't match book {self.symbol}")
         if order.quantity > MAX_ORDER_QUANTITY:
             raise ValueError(f"Quantity {order.quantity} is above {MAX_ORDER_QUANTITY:,}")
-        units = price_to_units(order.price)
+        price = order.price
+        units = self._units.get(price)
+        if units is None:
+            units = price_to_units(price)  # Raises ValueError for a price the core can't hold
+            self._units[price] = units
+            self._prices.setdefault(units, price)
         micros = timestamp_to_micros(order.timestamp)
 
+        names = self._names
         number = self._next_number
         self._next_number += 1
-        self._names[number] = order.order_id
-        self._prices.setdefault(units, order.price)
+        names[number] = order.order_id
 
-        status, remaining, core_trades, self_trade_cancels = self._book.submit(
+        status, remaining, core_trades, removed = self._book.submit_compact(
             number, self._users.number(order.user_id), self._sides[order.side],
             units, order.quantity, micros)
 
-        if status in (_core.SubmitStatus.REJECTED_INVALID, _core.SubmitStatus.REJECTED_DUPLICATE):
-            del self._names[number]
+        if status in _REJECTED:
+            del names[number]
             raise ValueError(f"The C++ core rejected order {order.order_id}: {status.name}")
 
-        trades = [self._trade(trade, order) for trade in core_trades]
-
-        # Forget the IDs of orders that have left the book.
-        for cancelled in self_trade_cancels:
-            self._forget(cancelled)
+        trades = []
         if core_trades:
-            # Every trade but the last used up its resting order. The last one may
-            # have left part of it behind.
-            incoming_buys = order.side == Side.BUY
-            for index, trade in enumerate(core_trades):
-                resting = trade.sell_order_id if incoming_buys else trade.buy_order_id
-                if index < len(core_trades) - 1 or self._book.find(resting) is None:
-                    self._forget(resting)
+            # Local names save an attribute lookup per trade in the loop.
+            symbol, prefix, prices = self.symbol, self._trade_prefix, self._prices
+            user_name, timestamp = self._users.name, order.timestamp
+            for trade_id, buy, sell, buyer, seller, trade_units, quantity in core_trades:
+                trades.append(build_trusted(Trade, {
+                    "trade_id": prefix + str(trade_id),
+                    "symbol": symbol,
+                    "buy_order_id": names[buy],
+                    "sell_order_id": names[sell],
+                    "price": prices[trade_units],
+                    "quantity": quantity,
+                    "timestamp": timestamp,
+                    "buyer_user_id": user_name(buyer),
+                    "seller_user_id": user_name(seller),
+                }))
+
+        # Forget the IDs of resting orders that have left the book.
+        numbers = self._numbers
+        for gone in removed:
+            del numbers[names.pop(gone)]
 
         if remaining > 0:
-            self._numbers[order.order_id] = number
+            numbers[order.order_id] = number
         else:
-            del self._names[number]
+            del names[number]
         return trades
-
-    def _trade(self, trade, incoming: Order) -> Trade:
-        return Trade(
-            trade_id=f"TRD-{self.symbol}-{trade.trade_id}",
-            symbol=self.symbol,
-            buy_order_id=self._names[trade.buy_order_id],
-            sell_order_id=self._names[trade.sell_order_id],
-            price=self._prices[trade.price],
-            quantity=trade.quantity,
-            timestamp=incoming.timestamp,
-            buyer_user_id=self._users.name(trade.buyer),
-            seller_user_id=self._users.name(trade.seller),
-        )
 
     def _forget(self, number: int):
         name = self._names.pop(number)
@@ -134,10 +142,10 @@ class NativeOrderBook(BookQueries):
         number = self._numbers.get(order_id)
         if number is None:
             return None
-        order = self._order(self._book.find(number))
+        order = self._order(self._book.find(number), OrderStatus.CANCELLED)
         self._book.cancel(number)
         self._forget(number)
-        return order.with_status(OrderStatus.CANCELLED)
+        return order
 
     def has_order(self, order_id: str) -> bool:
         return order_id in self._numbers
@@ -157,17 +165,21 @@ class NativeOrderBook(BookQueries):
         view = self._book.peek_best(self._sides[side])
         return None if view is None else self._order(view)
 
-    def _order(self, view) -> Order:
-        return Order(
-            order_id=self._names[view.id],
-            user_id=self._users.name(view.user),
-            symbol=self.symbol,
-            side=Side.BUY if view.side == _core.Side.BUY else Side.SELL,
-            price=self._prices[view.price],
-            quantity=view.quantity,
-            timestamp=micros_to_timestamp(view.timestamp),
-            status=OrderStatus.PARTIAL if view.partially_filled else OrderStatus.OPEN,
-        )
+    def _order(self, view, status: Optional[OrderStatus] = None) -> Order:
+        """Build an Order from a core OrderView, with its status if none is given."""
+        if status is None:
+            status = OrderStatus.PARTIAL if view.partially_filled else OrderStatus.OPEN
+        # The core only holds orders that passed Order's checks, so skip them.
+        return build_trusted(Order, {
+            "order_id": self._names[view.id],
+            "user_id": self._users.name(view.user),
+            "symbol": self.symbol,
+            "side": Side.BUY if view.side == _core.Side.BUY else Side.SELL,
+            "price": self._prices[view.price],
+            "quantity": view.quantity,
+            "timestamp": micros_to_timestamp(view.timestamp),
+            "status": status,
+        })
 
     # ---- Prices and levels ----
 

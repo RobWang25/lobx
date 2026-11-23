@@ -2,7 +2,7 @@
 
 ## C++ Port
 
-Measured on an Apple M3 Pro with Python 3.14, all in one session, with a load average of about 3 to 4. Each figure is the median of 3 runs over the same 200,000-operation workloads used below. Every engine run reproduced the recorded result hashes on both backends.
+Measured on an Apple M3 Pro with Python 3.14, with a load average of about 3 to 4. Each figure is the median of 3 runs over the same 200,000-operation workloads used below. Every engine run reproduced the recorded result hashes on both backends. Figures are from after the wrapper changes described below, except where a table says otherwise.
 
 ### Throughput by layer
 
@@ -10,32 +10,58 @@ Operations per second. Each layer adds one step on top of the one above it.
 
 | Layer | `deep_book` | `mixed` | `cancel_heavy` |
 |-------|------------:|--------:|---------------:|
-| C++ core, sorted-vector ladder | 2,534,929 | 21,911,446 | 34,026,784 |
-| C++ core, `std::map` ladder | 9,581,116 | 11,804,795 | 31,020,415 |
-| Python calling `lobx._core` directly | 1,885,316 | 5,577,822 | 8,188,527 |
-| `TradingEngine`, cpp backend | 366,838 | 356,988 | 394,262 |
-| `TradingEngine`, python backend | 343,850 | 176,780 | 492,686 |
+| C++ core, sorted-vector ladder | 2,534,101 | 21,686,750 | 32,933,630 |
+| C++ core, `std::map` ladder | 9,276,034 | 11,829,539 | 31,381,984 |
+| Python calling `lobx._core` directly | 1,865,902 | 5,539,226 | 8,206,293 |
+| `TradingEngine`, cpp backend | 430,403 | 557,414 | 687,297 |
+| `TradingEngine`, python backend | 360,428 | 177,798 | 530,109 |
 
 - **C++ core:** measured with Google Benchmark (`build/cpp-release/lobx_bench`), with no Python involved.
 - **`lobx._core` directly:** IDs and prices are converted to integers before the clock starts, so this is the cost of crossing into C++ and building the returned Python objects.
 - **`TradingEngine`:** `Order` objects are built before the clock starts and event logging is off, as in the baseline below. No per-operation timers.
 
-The full engine is only 1 to 2 times faster on the C++ backend, and slower on `cancel_heavy`, even though the core alone is 7 to 124 times faster than the Python engine, depending on the workload. On `mixed`, the C++ core takes about 0.05 µs per operation and the C++-backed engine about 2.8 µs. The rest is Python around the core: converting each `Decimal` price and timestamp, building `Trade` objects, the engine's own bookkeeping and lock, and for each cancel, building the cancelled `Order` twice. No single function dominates.
+The C++-backed engine is 1.2 to 3.1 times faster than the Python engine, even though the core alone is 7 to 122 times faster. On `mixed`, the C++ core takes about 0.05 µs per operation and the C++-backed engine about 1.8 µs. The rest is Python around the core: the engine's own bookkeeping and lock (about 0.5 µs, the same on both backends), converting each timestamp, crossing into C++, and building the returned `Trade` objects.
+
+### Making the wrapper cheaper
+
+Before these changes, the C++-backed engine took 2.8 µs per operation on `mixed` and was slower than the Python engine on `cancel_heavy`. Timing each step separately showed where the time went:
+
+| Step | Before | After |
+|------|-------:|------:|
+| Convert a `Decimal` price to integer units | 277 ns | 16 ns, cached per price |
+| Build a `Trade` (a frozen dataclass) | 590 ns | 295 ns |
+| Read a core trade's 7 fields | 157 ns | Unpacked from a plain tuple |
+| Work out which resting orders left the book | A Python loop and a `find` call | Returned by C++ |
+| Build the cancelled `Order` | Twice, with validation | Once, without |
+
+- **Price cache:** `NativeOrderBook` keeps each `Decimal` price's units in a dictionary, so only a price's first appearance pays for the conversion.
+- **`build_trusted`** (`lobx/models.py`) creates a frozen `Order` or `Trade` without running `__init__` and `__post_init__`. It's only used for values the core already holds, which passed validation on the way in. A test checks that the result compares, hashes and refuses changes exactly like one built normally.
+- **`submit_compact`** is a second binding method, shaped for the wrapper. It returns trades as plain tuples and lists the resting orders the call removed, either used up or cancelled as self-trades. The original `submit` is unchanged.
+
+`TradingEngine` throughput on the cpp backend, operations per second:
+
+| Workload | Before | After | Change |
+|----------|-------:|------:|-------:|
+| `deep_book` | 366,838 | 430,403 | +17% |
+| `mixed` | 356,988 | 557,414 | +56% |
+| `cancel_heavy` | 394,262 | 687,297 | +74% |
+
+The engine's own bookkeeping now dominates: per operation, it takes a lock, reads the clock twice and appends to two latency lists. That code is shared with the Python backend, so it wasn't changed here.
 
 ### Latency through the engine
 
-`bench/run_baseline.py` on each backend. Its per-operation timers add a little to every figure.
+`bench/run_baseline.py` on each backend. Its per-operation timers add a little to every figure. The python rows are from the previous session, since the Python backend's code didn't change.
 
 | Workload | Backend | Ops/sec, logging off | p50 | p99 | Ops/sec, logging on |
 |----------|---------|---------------------:|----:|----:|--------------------:|
 | `deep_book` | python | 327,466 | 1.67 µs | 20.12 µs | 187,021 |
-| `deep_book` | cpp | 345,846 | 2.04 µs | 8.33 µs | 188,749 |
+| `deep_book` | cpp | 360,333 | 1.79 µs | 7.79 µs | 189,415 |
 | `mixed` | python | 170,465 | 1.92 µs | 26.25 µs | 112,270 |
-| `mixed` | cpp | 322,469 | 1.96 µs | 8.79 µs | 162,652 |
+| `mixed` | cpp | 419,754 | 1.58 µs | 5.67 µs | 195,666 |
 | `cancel_heavy` | python | 485,206 | 1.50 µs | 14.00 µs | 257,370 |
-| `cancel_heavy` | cpp | 386,588 | 2.21 µs | 5.46 µs | 226,117 |
+| `cancel_heavy` | cpp | 593,869 | 1.50 µs | 3.71 µs | 295,698 |
 
-The C++ backend's main gain here is tail latency. Its p99 is 2.4 to 3 times lower on every workload, because matching an order that trades against several levels no longer costs Python work per level. Its p50 is slightly higher, because every operation pays the conversion cost.
+The C++ backend's p99 is 2.6 to 4.6 times lower on every workload, because matching an order that trades against several levels no longer costs Python work per level. Its p50 is now level with or below the Python backend's. With event logging on, both backends spend most of their time in the event logger, which is shared Python code.
 
 ### Through HTTP
 
@@ -43,10 +69,10 @@ The first 3,000 operations of `mixed`, sent as `POST /orders` and `DELETE /order
 
 | Backend | Requests/sec | p50 | p99 |
 |---------|-------------:|----:|----:|
-| python | 2,045 | 470 µs | 883 µs |
-| cpp | 2,058 | 465 µs | 680 µs |
+| python | 1,987 | 471 µs | 886 µs |
+| cpp | 2,120 | 467 µs | 581 µs |
 
-Each request takes about 470 µs, and the engine accounts for about 3 to 6 µs of that, around 1%. FastAPI, request validation, JSON and the network stack account for nearly all of it, so the backend barely changes API throughput. The lower p99 on C++ is consistent with the engine results, but at this sample size it's a hint rather than a firm result.
+Each request takes about 470 µs, and the engine accounts for a few microseconds of that, around 1%. FastAPI, request validation, JSON and the network stack account for nearly all of it, so the backend barely changes API throughput. The lower p99 on C++ is consistent with the engine results, but at this sample size it's a hint rather than a firm result.
 
 ### Sorted vector or `std::map` for the price ladder
 
@@ -96,7 +122,7 @@ LOBX_BACKEND=cpp .venv2/bin/python bench/run_baseline.py --label my-cpp-run
 ./build/cpp-release/lobx_bench
 ```
 
-Results from this session are in `bench/results/phase4-*.json`.
+Results are in `bench/results/`: `phase4-*.json` from before the wrapper changes and `phase5-*.json` from after.
 
 ---
 
