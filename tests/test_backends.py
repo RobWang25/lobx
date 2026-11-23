@@ -36,6 +36,10 @@ class TestChoosingABackend:
         monkeypatch.delenv("LOBX_BACKEND", raising=False)
         assert resolve_backend() == "python"
 
+    def test_empty_environment_defaults_to_python(self, monkeypatch):
+        monkeypatch.setenv("LOBX_BACKEND", "")
+        assert TradingEngine().backend == "python"
+
     @needs_core
     def test_reads_the_environment(self, monkeypatch):
         monkeypatch.setenv("LOBX_BACKEND", "CPP")

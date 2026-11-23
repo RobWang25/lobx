@@ -101,8 +101,10 @@ add_test(NAME lobx_tests COMMAND lobx_tests)
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/invalid-workload.txt"
   CONTENT "N O1 user B 100 10\nN O2 user X 100 10\n")
 add_test(NAME lobx_replay_rejects_invalid_side
-  COMMAND lobx_replay "${CMAKE_CURRENT_BINARY_DIR}/invalid-workload.txt")
-set_tests_properties(lobx_replay_rejects_invalid_side PROPERTIES WILL_FAIL TRUE)
+  COMMAND "${CMAKE_COMMAND}"
+    "-DREPLAY=$<TARGET_FILE:lobx_replay>"
+    "-DWORKLOAD=${CMAKE_CURRENT_BINARY_DIR}/invalid-workload.txt"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_invalid_workload.cmake")
 
 if(NOT LOBX_SANITIZE)
   set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)

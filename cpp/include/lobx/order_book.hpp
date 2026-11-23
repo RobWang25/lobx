@@ -11,6 +11,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -355,7 +356,10 @@ private:
 
     void remove_level(Index level_index) {
         const Level& level = levels_[level_index];
-        ladder(level.side).erase(sort_key(level.side, level.price));
+        Ladder& entries = ladder(level.side);
+        const Price key = sort_key(level.side, level.price);
+        assert(entries.find(key) == level_index && "missing or incorrect ladder entry");
+        entries.erase(key);
         levels_.release(level_index);
     }
 

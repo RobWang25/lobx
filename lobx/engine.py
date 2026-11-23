@@ -29,7 +29,9 @@ def resolve_backend(backend: Optional[str] = None) -> str:
     Raises ValueError for an unknown name, and RuntimeError if cpp is chosen but
     the C++ core isn't built.
     """
-    name = (os.environ.get("LOBX_BACKEND", "python") if backend is None else backend).strip().lower()
+    if backend is None:
+        backend = os.environ.get("LOBX_BACKEND") or "python"
+    name = backend.strip().lower()
     if name not in BACKENDS:
         raise ValueError(f"Unknown backend {name!r}, expected one of {', '.join(BACKENDS)}")
     if name == "cpp":
