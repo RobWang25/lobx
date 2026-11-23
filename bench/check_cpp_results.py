@@ -18,32 +18,44 @@ HERE = Path(__file__).resolve().parent
 PYTHON_RESULTS = HERE / "results" / "cancel-o1-py3.14.json"
 
 
+def load_expected_workloads(python_results_path):
+    """Load reference hashes and verify the files match the workload manifest."""
+    if not python_results_path.is_file():
+        raise ValueError(f"{python_results_path} is missing. Run bench/run_baseline.py and pass its JSON with --python-results.")
+
+    manifest = json.loads((HERE / "workload_manifest.json").read_text())
+    python_results = json.loads(python_results_path.read_text())["workloads"]
+    workloads = []
+    for name, entry in manifest.items():
+        expected = python_results.get(name, {}).get("logging_off", {}).get("result_sha256")
+        if not expected:
+            raise ValueError(f"The Python baseline has no logging-off result hash for {name}.")
+        workload = HERE / "workloads" / f"{name}.txt"
+        if not workload.is_file() or hashlib.sha256(workload.read_bytes()).hexdigest() != entry["sha256"]:
+            raise ValueError(f"{workload} is missing or stale. Run bench/generate_workloads.py first.")
+        workloads.append((name, workload, expected))
+    return workloads
+
+
 def main():
     parser = argparse.ArgumentParser(description="Compare C++ replay hashes with the Python baseline.")
     parser.add_argument("replay", help="path to the lobx_replay executable")
     parser.add_argument("--python-results", type=Path, default=PYTHON_RESULTS,
                         help="baseline JSON from bench/run_baseline.py with logging off")
     args = parser.parse_args()
-    if not args.python_results.is_file():
-        parser.error(f"{args.python_results} is missing. Run bench/run_baseline.py and pass its JSON with --python-results.")
+    try:
+        workloads = load_expected_workloads(args.python_results)
+    except (KeyError, OSError, ValueError) as error:
+        parser.error(str(error))
 
-    manifest = json.loads((HERE / "workload_manifest.json").read_text())
-    python_results = json.loads(args.python_results.read_text())["workloads"]
-    if any("result_sha256" not in python_results.get(name, {}).get("logging_off", {}) for name in manifest):
-        parser.error("The Python baseline must contain a logging-off result hash for each workload.")
     all_match = True
-    for name, entry in manifest.items():
-        workload = HERE / "workloads" / f"{name}.txt"
-        if not workload.is_file() or hashlib.sha256(workload.read_bytes()).hexdigest() != entry["sha256"]:
-            parser.error(f"{workload} is missing or stale. Run bench/generate_workloads.py first.")
-
+    for name, workload, expected in workloads:
         run = subprocess.run(
             [args.replay, str(workload)],
             capture_output=True,
             check=True,
         )
         actual = hashlib.sha256(run.stdout).hexdigest()
-        expected = python_results[name]["logging_off"]["result_sha256"]
         match = actual == expected
         all_match = all_match and match
         print(f"{name:<13} {'match' if match else 'DIFFERENT'}  {actual[:12]}  {run.stderr.decode().strip()}")
