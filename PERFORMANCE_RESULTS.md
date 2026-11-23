@@ -1,5 +1,24 @@
 # Performance Results
 
+## Phase 5 wrapper overhead
+
+Phase 4 measured about 0.045 µs per `mixed` operation in the vector core and 3.13 µs through the C++-backed `TradingEngine`. This phase caches successful Decimal conversions, constructs frozen models from validated native values, and returns trade tuples and removed resting IDs from a single binding call. Cancel calls construct one cancelled `Order` when they need a snapshot. The engine skips that construction when logging is off and only a boolean is needed.
+
+### Isolated `timeit` measurements
+
+Each figure is the median of five runs of 100,000 samples on Python 3.14.2. The inputs are prepared before timing each step.
+
+| Step | Phase 4 path | Phase 5 path |
+| --- | ---: | ---: |
+| Convert price / look up cached units | 564 ns | 23 ns |
+| Construct a `Trade` | 851 ns | 297 ns |
+| Construct an `Order` | 846 ns | 260 ns |
+| Read seven trade fields / unpack a tuple | 170 ns | 25 ns |
+| Build an `OrderView` to check a resting ID / check membership | 61 ns | 29 ns |
+| Reconstruct a cancelled `Order` | 2,445 ns | 881 ns |
+
+The compact binding packs more data per submit. A resting-order and matching-order pair took 430 ns through the compact binding and 296 ns through the original binding in the after run. The compact result saves work on the Python side by carrying both the trade fields and the removed resting IDs. The raw binding benchmark measures the original `submit` interface.
+
 ## Phase 4 benchmarks
 
 The release benchmark measures both C++ ladders, the nanobind calls with prepared integer arguments, and both `TradingEngine` backends with prepared orders and event logging disabled. Each in-process workload contains 200,000 operations. Google Benchmark measures elapsed time for the core workload runs. The Python runner rotates the order of the remaining layers between rounds.
@@ -11,6 +30,8 @@ Both ladders reproduce the Python result hashes for all three workloads. The Cat
 ### Local results
 
 Apple M3 Pro with Python 3.14.2. Each entry is the median of 3 rounds.
+
+The recorded data is available in [layered throughput and HTTP](bench/results/phase4-local.json), [C++ microbenchmarks](bench/results/phase4-micro-local.json), and [engine latency](bench/results/phase4-engine-latency-local.json).
 
 | Layer, ops/sec | `deep_book` | `mixed` | `cancel_heavy` |
 | --- | ---: | ---: | ---: |
@@ -65,7 +86,7 @@ ctest --test-dir build/cpp-release --output-on-failure
 ./build/cpp-release/lobx_bench --benchmark_filter='add_cancel_level|cancel_mid_queue|rest_and_fill' --benchmark_repetitions=3 --benchmark_enable_random_interleaving=true
 ```
 
-The layered runner records the medians, input hashes, and binary fingerprints in `build/bench-results/phase4-local.json` for this label. The local microbenchmark and engine latency JSON files are in the same directory.
+The layered runner writes new measurements to `build/bench-results/phase4-local.json` for this label. The linked snapshots in `bench/results/` contain the measurements used in this report.
 
 For per-operation engine latency, select a backend explicitly in the timed replay.
 

@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from lobx import _native
 from lobx.engine import TradingEngine, resolve_backend
-from lobx.models import Order, OrderStatus, Side
+from lobx.models import EventType, Order, OrderStatus, Side
 from lobx.native_book import NativeOrderBook
 
 SYMBOL = "TEST"
@@ -174,6 +174,28 @@ class TestCppBackend:
         assert str(stored.price) == "150.00"
         assert stored.timestamp == NOW  # Including the microseconds
 
+    def test_equal_prices_share_one_conversion_and_keep_first_accepted_spelling(self, monkeypatch):
+        from lobx import native_book
+
+        calls = []
+
+        def convert(price):
+            calls.append(str(price))
+            return _native.price_to_units(price)
+
+        monkeypatch.setattr(native_book, "price_to_units", convert)
+        book = NativeOrderBook(SYMBOL)
+        aware = NOW.replace(tzinfo=timezone.utc)
+        with pytest.raises(ValueError, match="naive"):
+            book.submit(make_order("A", "u1", Side.BUY, "150.000", 1, timestamp=aware))
+        book.submit(make_order("A", "u1", Side.BUY, "150.00", 1))
+        book.submit(make_order("B", "u2", Side.BUY, "150.0", 1))
+
+        orders = book.get_orders_at_price(Side.BUY, Decimal("150"))
+        assert [str(order.price) for order in orders] == ["150.00", "150.00"]
+        assert calls == ["150.000", "150.00"]
+        assert book.get_orders_at_price(Side.BUY, Decimal("sNaN")) == []
+
     def test_partial_fills_report_partial_status(self, engine):
         engine.submit_order(make_order("A", "u1", Side.SELL, "100", 10))
         engine.submit_order(make_order("B", "u2", Side.BUY, "100", 4))
@@ -194,6 +216,28 @@ class TestCppBackend:
         assert engine.cancel_order("A", SYMBOL)
         assert not engine.cancel_order("A", SYMBOL)
         assert engine.get_book(SYMBOL).get_order("A") is None
+
+    def test_cancel_without_logging_does_not_build_an_order(self, engine, monkeypatch):
+        engine.submit_order(make_order("A", "u1", Side.BUY, "100", 10))
+        book = engine.get_book(SYMBOL)
+
+        def unexpected_order(*args):
+            pytest.fail("boolean cancel reconstructed an Order")
+
+        monkeypatch.setattr(book, "_order", unexpected_order)
+        assert engine.cancel_order("A", SYMBOL) is True
+        assert engine.cancel_order("A", SYMBOL) is False
+        assert engine.total_orders_cancelled == 1
+        assert book._names == {}
+
+    def test_cancel_with_logging_records_the_cancel(self):
+        engine = TradingEngine(backend="cpp")
+        engine.submit_order(make_order("A", "u1", Side.BUY, "100", 10))
+
+        assert engine.cancel_order("A", SYMBOL) is True
+        event = engine.get_event_log()[-1]
+        assert event.event_type == EventType.CANCEL_ORDER
+        assert event.payload == {"symbol": SYMBOL, "order_id": "A"}
 
     @pytest.mark.parametrize("price", ["100.00001", "0.00001"])
     def test_rejects_prices_finer_than_four_decimals(self, engine, price):

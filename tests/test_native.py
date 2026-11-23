@@ -5,6 +5,8 @@ The core is optional, so its tests are skipped unless the package has been built
     .venv/bin/python -m pip install --no-build-isolation -e .
 """
 import random
+from dataclasses import FrozenInstanceError, fields
+from datetime import datetime
 from decimal import Decimal, Inexact, localcontext
 from pathlib import Path
 
@@ -13,9 +15,28 @@ from hypothesis import given, settings, strategies as st
 
 from bench import differential
 from lobx._native import AVAILABLE, IdMap, _core, price_to_units, units_to_price
-from lobx.models import Side
+from lobx.models import Order, Side, Trade, _build_trusted
 
 needs_core = pytest.mark.skipif(not AVAILABLE, reason="lobx._core isn't built")
+
+
+def test_trusted_models_match_normal_construction():
+    price = Decimal("100.00")
+    timestamp = datetime(2026, 1, 1)
+    for normal in (
+        Order("O1", "u1", "BENCH", Side.BUY, price, 5, timestamp),
+        Trade("T1", "BENCH", "O1", "O2", price, 5, timestamp, "u1", "u2"),
+    ):
+        cls = type(normal)
+        values = dict(vars(normal))
+        assert values.keys() == {field.name for field in fields(cls)}
+        trusted = _build_trusted(cls, values)
+        assert trusted == normal
+        assert repr(trusted) == repr(normal)
+        assert hash(trusted) == hash(normal)
+        assert trusted.to_dict() == normal.to_dict()
+        with pytest.raises(FrozenInstanceError):
+            trusted.quantity = 4
 
 
 class TestPriceConversion:
@@ -114,6 +135,30 @@ class TestBindings:
         book.submit(1, 10, core.Side.SELL, 1_000_000, 5)
         status, _, trades, cancels = book.submit(2, 10, core.Side.BUY, 1_000_000, 5)
         assert (status, trades, cancels) == (core.SubmitStatus.OPEN, [], [1])
+
+    @pytest.mark.parametrize("last_fill", [1, 5])
+    def test_compact_submit_reports_removed_resting_ids(self, core, book, last_fill):
+        book.submit(1, 10, core.Side.SELL, 1_000_000, 3)
+        book.submit(2, 11, core.Side.SELL, 1_000_000, 5)
+        book.submit(3, 20, core.Side.SELL, 1_000_000, 5)
+        book.submit(4, 12, core.Side.SELL, 1_000_000, 5)
+
+        status, remaining, trades, removed = book.submit_compact(
+            5, 20, core.Side.BUY, 1_000_000, 8 + last_fill,
+        )
+
+        assert (status, remaining) == (core.SubmitStatus.FILLED, 0)
+        assert trades == [
+            (1, 5, 1, 20, 10, 1_000_000, 3),
+            (2, 5, 2, 20, 11, 1_000_000, 5),
+            (3, 5, 4, 20, 12, 1_000_000, last_fill),
+        ]
+        if last_fill == 5:
+            assert sorted(removed) == [1, 2, 3, 4]
+            assert not book.contains(4)
+        else:
+            assert sorted(removed) == [1, 2, 3]
+            assert book.find(4).quantity == 4
 
     def test_rejections(self, core, book):
         too_big = core.MAX_ORDER_QUANTITY + 1

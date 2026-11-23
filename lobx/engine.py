@@ -221,15 +221,18 @@ class TradingEngine:
                 return False
 
             book = self.books[symbol]
-            cancelled_order = book.cancel_order(order_id)
+            logger = self.event_logger
+            if logger is None and self.backend == "cpp":
+                cancelled = book.cancel(order_id)
+            else:
+                cancelled_order = book.cancel_order(order_id)
+                cancelled = cancelled_order is not None
+                if cancelled and logger:
+                    logger.log_cancel(cancelled_order)
 
-            if cancelled_order:
-                if self.event_logger:
-                    self.event_logger.log_cancel(cancelled_order)
+            if cancelled:
                 self.total_orders_cancelled += 1
-                return True
-
-            return False
+            return cancelled
     
     def _new_book(self, symbol: str):
         if self.backend == "cpp":

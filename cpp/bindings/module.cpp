@@ -7,6 +7,7 @@
 // Each call holds the GIL from start to finish, so only one Python thread can be
 // inside a book at a time.
 #include <cstdint>
+#include <cstddef>
 #include <vector>
 
 #include <nanobind/nanobind.h>
@@ -41,14 +42,35 @@ public:
     // Returns (status, remaining, trades, self_trade_cancels).
     nb::tuple submit(OrderId id, UserId user, Side side, Price price, Quantity quantity,
                      Timestamp timestamp) {
-        sink_.trades.clear();
-        sink_.self_trade_cancels.clear();
-        const SubmitResult result =
-            book_.submit(NewOrder{id, user, side, price, quantity, timestamp}, sink_);
+        const SubmitResult result = collect(NewOrder{id, user, side, price, quantity, timestamp});
         // nb::cast converts a C++ value into a new Python object. For a vector, that
         // means a new Python list.
         return nb::make_tuple(result.status, result.remaining, nb::cast(sink_.trades),
                               nb::cast(sink_.self_trade_cancels));
+    }
+
+    // Returns (status, remaining, trade tuples, IDs of removed resting orders).
+    // Each trade tuple contains the IDs, users, price and quantity used by the wrapper.
+    nb::tuple submit_compact(OrderId id, UserId user, Side side, Price price, Quantity quantity,
+                             Timestamp timestamp) {
+        const SubmitResult result = collect(NewOrder{id, user, side, price, quantity, timestamp});
+        nb::list trades;
+        nb::list removed;
+        for (OrderId cancelled : sink_.self_trade_cancels) {
+            removed.append(cancelled);
+        }
+        for (std::size_t i = 0; i < sink_.trades.size(); ++i) {
+            const Trade& trade = sink_.trades[i];
+            trades.append(nb::make_tuple(trade.trade_id, trade.buy_order_id, trade.sell_order_id,
+                                         trade.buyer, trade.seller, trade.price, trade.quantity));
+
+            // Only the final fill can leave part of a resting order in the book.
+            const OrderId resting = side == Side::Buy ? trade.sell_order_id : trade.buy_order_id;
+            if (i + 1 < sink_.trades.size() || !book_.contains(resting)) {
+                removed.append(resting);
+            }
+        }
+        return nb::make_tuple(result.status, result.remaining, trades, removed);
     }
 
     // Exposes the wrapped book for the read-only methods.
@@ -56,6 +78,12 @@ public:
     OrderBook& book() { return book_; }
 
 private:
+    SubmitResult collect(const NewOrder& order) {
+        sink_.trades.clear();
+        sink_.self_trade_cancels.clear();
+        return book_.submit(order, sink_);
+    }
+
     OrderBook book_;
     CollectingSink sink_;
 };
@@ -122,6 +150,8 @@ NB_MODULE(_core, m) {
         .def(nb::init<bool>(), "self_trade_prevention"_a = true)
         .def("submit", &PyOrderBook::submit, "order_id"_a, "user_id"_a, "side"_a, "price"_a,
              "quantity"_a, "timestamp"_a = 0)
+        .def("submit_compact", &PyOrderBook::submit_compact, "order_id"_a, "user_id"_a, "side"_a,
+             "price"_a, "quantity"_a, "timestamp"_a = 0)
         .def("cancel", [](PyOrderBook& self, OrderId id) { return self.book().cancel(id); },
              "order_id"_a)
         .def("best_bid", [](const PyOrderBook& self) { return self.book().best_bid(); })
@@ -131,6 +161,8 @@ NB_MODULE(_core, m) {
              [](const PyOrderBook& self, Side side) { return self.book().peek_best(side); },
              "side"_a)
         .def("find", [](const PyOrderBook& self, OrderId id) { return self.book().find(id); },
+             "order_id"_a)
+        .def("contains", [](const PyOrderBook& self, OrderId id) { return self.book().contains(id); },
              "order_id"_a)
         .def("orders_at",
              [](const PyOrderBook& self, Side side, Price price) {

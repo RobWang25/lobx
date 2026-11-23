@@ -167,6 +167,8 @@ public:
         return view(levels_[entries.best()].head);
     }
 
+    bool contains(OrderId id) const { return index_.contains(id); }
+
     std::optional<OrderView> find(OrderId id) const {
         const auto found = index_.find(id);
         if (found == index_.end()) {

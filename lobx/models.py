@@ -5,7 +5,7 @@ Immutable dataclasses for orders, trades, and events.
 from dataclasses import dataclass, field, asdict
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
+from typing import Optional, TypeVar
 from datetime import datetime
 import uuid
 
@@ -217,3 +217,18 @@ def generate_order_id() -> str:
 def generate_trade_id() -> str:
     """Generate unique trade ID."""
     return f"TRD-{uuid.uuid4().hex[:12].upper()}"
+
+
+_Model = TypeVar("_Model", Order, Trade)
+_new_instance = object.__new__
+_set_attribute = object.__setattr__
+
+
+def _build_trusted(cls: type[_Model], fields: dict) -> _Model:
+    """Build a frozen model from validated native values and take ownership of its field dict.
+
+    The caller must supply a fresh dict with every dataclass field, including defaults.
+    """
+    instance = _new_instance(cls)
+    _set_attribute(instance, "__dict__", fields)
+    return instance
