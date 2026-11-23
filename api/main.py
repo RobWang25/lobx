@@ -256,7 +256,7 @@ async def get_order_book(symbol: str, depth: int = 10):
         # Aggregate by price level
         bid_levels = {}
         for price, orders in book.bids.items():
-            total_qty = sum(o.quantity for o in orders)
+            total_qty = sum(o.quantity for o in orders.values())
             bid_levels[price] = BookLevel(
                 price=price,
                 quantity=Decimal(total_qty),
@@ -265,7 +265,7 @@ async def get_order_book(symbol: str, depth: int = 10):
         
         ask_levels = {}
         for price, orders in book.asks.items():
-            total_qty = sum(o.quantity for o in orders)
+            total_qty = sum(o.quantity for o in orders.values())
             ask_levels[price] = BookLevel(
                 price=price,
                 quantity=Decimal(total_qty),

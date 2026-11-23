@@ -1,0 +1,152 @@
+{
+  "python": "3.9.6",
+  "machine": "Apple M3 Pro",
+  "lobx_source_sha256": "7abd77eeb81bde2057fa46235631d1b0284dc8c3b17dd15499367862acc2aee6",
+  "repeats": 3,
+  "workloads": {
+    "deep_book": {
+      "logging_off": {
+        "ops_per_sec": 129423,
+        "seconds": 1.545,
+        "latency_us": {
+          "p50": 3.67,
+          "p90": 10.5,
+          "p99": 44.83,
+          "p999": 80.71,
+          "max": 141226.54
+        },
+        "trades": 34564,
+        "traded_quantity": 878458,
+        "cancels": 23804,
+        "cancel_hits": 18458,
+        "resting_orders": 122707,
+        "resting_levels": 30836,
+        "result_sha256": "722befa9ba1fe87946598ebbd6b6bd3209cbcd2d0a3f4c502251e35127dd8740",
+        "all_ops_per_sec": [
+          128305,
+          135124,
+          129423
+        ]
+      },
+      "logging_on": {
+        "ops_per_sec": 68072,
+        "seconds": 2.938,
+        "latency_us": {
+          "p50": 7.29,
+          "p90": 24.17,
+          "p99": 59.83,
+          "p999": 152.62,
+          "max": 275611.58
+        },
+        "trades": 34564,
+        "traded_quantity": 878458,
+        "cancels": 23804,
+        "cancel_hits": 18458,
+        "resting_orders": 122707,
+        "resting_levels": 30836,
+        "result_sha256": "722befa9ba1fe87946598ebbd6b6bd3209cbcd2d0a3f4c502251e35127dd8740",
+        "all_ops_per_sec": [
+          65335,
+          71496,
+          68072
+        ]
+      }
+    },
+    "mixed": {
+      "logging_off": {
+        "ops_per_sec": 72725,
+        "seconds": 2.75,
+        "latency_us": {
+          "p50": 4.12,
+          "p90": 31.38,
+          "p99": 55.54,
+          "p999": 78.79,
+          "max": 108161.04
+        },
+        "trades": 131841,
+        "traded_quantity": 3358397,
+        "cancels": 29795,
+        "cancel_hits": 5414,
+        "resting_orders": 31307,
+        "resting_levels": 504,
+        "result_sha256": "f6681e1de8d7a323ea52106f22f15c6f35f6765317a46f5dd0a6010fc856f098",
+        "all_ops_per_sec": [
+          72470,
+          75439,
+          72725
+        ]
+      },
+      "logging_on": {
+        "ops_per_sec": 45195,
+        "seconds": 4.425,
+        "latency_us": {
+          "p50": 7.83,
+          "p90": 42.38,
+          "p99": 73.17,
+          "p999": 117.62,
+          "max": 268226.29
+        },
+        "trades": 131841,
+        "traded_quantity": 3358397,
+        "cancels": 29795,
+        "cancel_hits": 5414,
+        "resting_orders": 31307,
+        "resting_levels": 504,
+        "result_sha256": "f6681e1de8d7a323ea52106f22f15c6f35f6765317a46f5dd0a6010fc856f098",
+        "all_ops_per_sec": [
+          43066,
+          45195,
+          45475
+        ]
+      }
+    },
+    "cancel_heavy": {
+      "logging_off": {
+        "ops_per_sec": 203174,
+        "seconds": 0.984,
+        "latency_us": {
+          "p50": 3.5,
+          "p90": 4.21,
+          "p99": 30.38,
+          "p999": 43.88,
+          "max": 51388.42
+        },
+        "trades": 14565,
+        "traded_quantity": 249475,
+        "cancels": 91719,
+        "cancel_hits": 87115,
+        "resting_orders": 6380,
+        "resting_levels": 20,
+        "result_sha256": "208aa1fd4c430f422d0b434e65ac06c2785fce8b0a5255f7a6cea081632cd83f",
+        "all_ops_per_sec": [
+          203174,
+          212247,
+          200799
+        ]
+      },
+      "logging_on": {
+        "ops_per_sec": 93878,
+        "seconds": 2.13,
+        "latency_us": {
+          "p50": 6.79,
+          "p90": 8.17,
+          "p99": 42.0,
+          "p999": 73.17,
+          "max": 137775.96
+        },
+        "trades": 14565,
+        "traded_quantity": 249475,
+        "cancels": 91719,
+        "cancel_hits": 87115,
+        "resting_orders": 6380,
+        "resting_levels": 20,
+        "result_sha256": "208aa1fd4c430f422d0b434e65ac06c2785fce8b0a5255f7a6cea081632cd83f",
+        "all_ops_per_sec": [
+          93878,
+          100437,
+          92944
+        ]
+      }
+    }
+  }
+}

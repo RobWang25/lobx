@@ -4,6 +4,7 @@ Main trading engine coordinating order books and matching.
 import asyncio
 from typing import Dict, List, Optional
 from datetime import datetime
+from threading import Lock
 import time
 
 from .models import Order, Trade, OrderStatus
@@ -44,7 +45,11 @@ class TradingEngine:
         """
         self.books: Dict[str, OrderBook] = {}
         self.use_async = use_async
-        
+
+        # Submits and cancels run one at a time. Matching reads the best order and
+        # then changes it, so another thread must not change the book in between.
+        self._lock = Lock()
+
         # Use async or sync matching engine
         if use_async:
             self.matching_engine = AsyncMatchingEngine()
@@ -88,13 +93,14 @@ class TradingEngine:
         5. Track statistics
         """
         start_time = time.perf_counter()
-        
-        # Profile if enabled
-        if self.profiler:
-            with self.profiler.measure_operation('submit_order'):
+
+        with self._lock:
+            # Profile if enabled
+            if self.profiler:
+                with self.profiler.measure_operation('submit_order'):
+                    return self._submit_order_impl(order, start_time)
+            else:
                 return self._submit_order_impl(order, start_time)
-        else:
-            return self._submit_order_impl(order, start_time)
     
     def _submit_order_impl(self, order: Order, start_time: float) -> List[Trade]:
         """Internal submit order implementation"""
@@ -153,19 +159,20 @@ class TradingEngine:
         Returns:
             True if cancelled successfully
         """
-        if symbol not in self.books:
+        with self._lock:
+            if symbol not in self.books:
+                return False
+
+            book = self.books[symbol]
+            cancelled_order = book.cancel_order(order_id)
+
+            if cancelled_order:
+                if self.event_logger:
+                    self.event_logger.log_cancel(cancelled_order)
+                self.total_orders_cancelled += 1
+                return True
+
             return False
-        
-        book = self.books[symbol]
-        cancelled_order = book.cancel_order(order_id)
-        
-        if cancelled_order:
-            if self.event_logger:
-                self.event_logger.log_cancel(cancelled_order)
-            self.total_orders_cancelled += 1
-            return True
-        
-        return False
     
     def get_book(self, symbol: str) -> Optional[OrderBook]:
         """Get order book for symbol."""

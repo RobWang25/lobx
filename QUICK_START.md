@@ -30,10 +30,8 @@ stats = engine.get_statistics()
 print(stats['profiler_metrics'])
 ```
 
-### 3. Async Engine
-```python
-engine = TradingEngine(use_async=True)
-```
+### 3. Async Engine (not working)
+`TradingEngine(use_async=True)` currently raises a `TypeError` on the first order, and `AsyncMatchingEngine` can't create trades. Use the default synchronous engine. FastAPI already handles connections asynchronously around it.
 
 ## Trading UI Quick Guide
 
@@ -80,17 +78,8 @@ engine = TradingEngine(use_async=True)
 TradingEngine(
     enable_logging=True,      # Event logging
     event_callback=None,      # Async event callback
-    use_async=False,          # Async matching
+    use_async=False,          # Leave off: async matching doesn't work
     enable_profiling=False    # Performance profiling
-)
-```
-
-### Async Engine Options
-```python
-AsyncMatchingEngine(
-    enable_self_trade_prevention=True,
-    thread_safe=False,        # Thread-safe mode
-    batch_size=100           # Batch processing size
 )
 ```
 
@@ -119,18 +108,7 @@ python -m pytest tests/ -v
 
 ## Performance
 
-### Without Profiling
-- 152,000 orders/sec
-- P50: 0.002 ms
-- P99: 0.007 ms
-
-### With Profiling
-- 80,000 orders/sec (5% overhead)
-- Detailed metrics available
-
-### Async Batch Mode
-- 100,000+ orders/sec
-- Better resource utilization
+See `PERFORMANCE_RESULTS.md` for current numbers and how to reproduce them.
 
 ## Documentation
 
@@ -165,9 +143,6 @@ python -m pytest tests/ -v
 - cProfile integration
 - Operation-level latency tracking
 - Hot path identification
-- Async matching engine
-- Batch processing
-- Thread-safe mode
 
 ### UI
 - Professional trading terminal

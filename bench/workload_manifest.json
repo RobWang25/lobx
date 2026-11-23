@@ -1,0 +1,23 @@
+{
+  "deep_book": {
+    "seed": 101,
+    "ops": 200000,
+    "new_orders": 176196,
+    "cancels": 23804,
+    "sha256": "5440aef1a93357444aaf1a982c20b723aec1d9e023d798a81bba41ff5545f3b3"
+  },
+  "mixed": {
+    "seed": 202,
+    "ops": 200000,
+    "new_orders": 170205,
+    "cancels": 29795,
+    "sha256": "2929e4c5911e26d127a68a7e44097386494eae935691add6dff69b4f833ef04b"
+  },
+  "cancel_heavy": {
+    "seed": 303,
+    "ops": 200000,
+    "new_orders": 108281,
+    "cancels": 91719,
+    "sha256": "8b081efcd9fc7ca56a0ff5e3e2d8614c0b6945954ab8bc71cbfd472bb5e4db89"
+  }
+}

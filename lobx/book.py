@@ -1,10 +1,13 @@
 """
-Limit Order Book implementation with O(1) operations.
-Uses price-level dictionaries with FIFO queues.
+Limit Order Book implementation.
+Uses price-level dictionaries with FIFO queues and heaps for best prices.
+
+Each price level is an OrderedDict of order_id -> order. It keeps arrival order
+like a queue, and it can also delete any order by ID without scanning.
 """
-from collections import deque, defaultdict
+from collections import OrderedDict, defaultdict
 from decimal import Decimal
-from typing import Optional, Dict, List, Deque
+from typing import Optional, Dict, List, Set
 import heapq
 
 from .models import Order, Side, OrderStatus
@@ -18,15 +21,15 @@ class OrderBook:
     - Bids: Dict[price -> FIFO queue of buy orders]
     - Asks: Dict[price -> FIFO queue of sell orders]
     - Order index: Dict[order_id -> order] for O(1) lookups
-    - Best bid/ask heaps for O(1) top-of-book access
+    - Best bid/ask heaps, cleaned up lazily, for top-of-book access
     """
     
     def __init__(self, symbol: str):
         self.symbol = symbol
         
         # Price levels with FIFO queues
-        self.bids: Dict[Decimal, Deque[Order]] = defaultdict(deque)
-        self.asks: Dict[Decimal, Deque[Order]] = defaultdict(deque)
+        self.bids: Dict[Decimal, "OrderedDict[str, Order]"] = defaultdict(OrderedDict)
+        self.asks: Dict[Decimal, "OrderedDict[str, Order]"] = defaultdict(OrderedDict)
         
         # Order index for fast lookups
         self.order_index: Dict[str, Order] = {}
@@ -34,7 +37,11 @@ class OrderBook:
         # Best prices (max heap for bids, min heap for asks)
         self.bid_prices: List[Decimal] = []  # Use negative prices for max-heap
         self.ask_prices: List[Decimal] = []
-        
+
+        # Prices currently in each heap, so each price is pushed only once
+        self._bid_prices_in_heap: Set[Decimal] = set()
+        self._ask_prices_in_heap: Set[Decimal] = set()
+
         # Statistics
         self.total_orders = 0
         self.total_volume = 0
@@ -59,12 +66,17 @@ class OrderBook:
         
         # Add to appropriate side
         if order.side == Side.BUY:
-            self.bids[order.price].append(order)
-            if order.price not in [-p for p in self.bid_prices]:
-                heapq.heappush(self.bid_prices, -order.price)
+            price = order.price
+            self.bids[price][order.order_id] = order
+            if price not in self._bid_prices_in_heap:
+                # Unary minus can round Decimal prices under the active context.
+                key = price.copy_negate() if isinstance(price, Decimal) else -price
+                heapq.heappush(self.bid_prices, key)
+                self._bid_prices_in_heap.add(price)
         else:
-            self.asks[order.price].append(order)
-            if order.price not in self.ask_prices:
+            self.asks[order.price][order.order_id] = order
+            if order.price not in self._ask_prices_in_heap:
+                self._ask_prices_in_heap.add(order.price)
                 heapq.heappush(self.ask_prices, order.price)
         
         # Index the order
@@ -83,7 +95,7 @@ class OrderBook:
         Returns:
             Cancelled order or None if not found
             
-        Time complexity: O(n) for queue search, but typically O(1)
+        Time complexity: O(1)
         """
         order = self.order_index.get(order_id)
         if not order:
@@ -92,11 +104,8 @@ class OrderBook:
         # Remove from price level queue
         queue = self.bids[order.price] if order.side == Side.BUY else self.asks[order.price]
         
-        try:
-            queue.remove(order)
-        except ValueError:
-            return None  # Order not in queue (already filled)
-        
+        del queue[order_id]
+
         # Clean up empty price level
         if not queue:
             if order.side == Side.BUY:
@@ -123,10 +132,12 @@ class OrderBook:
         Time complexity: O(log n) worst case (heap cleanup)
         """
         while self.bid_prices:
-            best = -self.bid_prices[0]
+            key = self.bid_prices[0]
+            best = key.copy_negate() if isinstance(key, Decimal) else -key
             if best in self.bids and self.bids[best]:
                 return best
             heapq.heappop(self.bid_prices)
+            self._bid_prices_in_heap.discard(best)
         return None
     
     def get_best_ask(self) -> Optional[Decimal]:
@@ -143,6 +154,7 @@ class OrderBook:
             if best in self.asks and self.asks[best]:
                 return best
             heapq.heappop(self.ask_prices)
+            self._ask_prices_in_heap.discard(best)
         return None
     
     def get_spread(self) -> Optional[Decimal]:
@@ -181,7 +193,7 @@ class OrderBook:
         )[:levels]
         
         for price in bid_prices_sorted:
-            total_qty = sum(o.quantity for o in self.bids[price])
+            total_qty = sum(o.quantity for o in self.bids[price].values())
             num_orders = len(self.bids[price])
             bids.append({
                 "price": float(price),
@@ -195,7 +207,7 @@ class OrderBook:
         )[:levels]
         
         for price in ask_prices_sorted:
-            total_qty = sum(o.quantity for o in self.asks[price])
+            total_qty = sum(o.quantity for o in self.asks[price].values())
             num_orders = len(self.asks[price])
             asks.append({
                 "price": float(price),
@@ -213,8 +225,9 @@ class OrderBook:
     
     def get_orders_at_price(self, side: Side, price: Decimal) -> List[Order]:
         """Get all orders at a specific price level."""
-        queue = self.bids[price] if side == Side.BUY else self.asks[price]
-        return list(queue)
+        levels = self.bids if side == Side.BUY else self.asks
+        queue = levels.get(price)
+        return list(queue.values()) if queue is not None else []
     
     def peek_best_order(self, side: Side) -> Optional[Order]:
         """
@@ -229,11 +242,11 @@ class OrderBook:
         if side == Side.BUY:
             price = self.get_best_bid()
             if price and self.bids[price]:
-                return self.bids[price][0]
+                return next(iter(self.bids[price].values()))
         else:
             price = self.get_best_ask()
             if price and self.asks[price]:
-                return self.asks[price][0]
+                return next(iter(self.asks[price].values()))
         return None
     
     def pop_best_order(self, side: Side) -> Optional[Order]:
@@ -249,7 +262,7 @@ class OrderBook:
         if side == Side.BUY:
             price = self.get_best_bid()
             if price and self.bids[price]:
-                order = self.bids[price].popleft()
+                _, order = self.bids[price].popitem(last=False)
                 if not self.bids[price]:
                     del self.bids[price]
                 del self.order_index[order.order_id]
@@ -257,25 +270,60 @@ class OrderBook:
         else:
             price = self.get_best_ask()
             if price and self.asks[price]:
-                order = self.asks[price].popleft()
+                _, order = self.asks[price].popitem(last=False)
                 if not self.asks[price]:
                     del self.asks[price]
                 del self.order_index[order.order_id]
                 return order
         return None
     
+    def reduce_best_order(self, side: Side, quantity: int) -> Optional[Order]:
+        """
+        Partially fill the best order on the given side, keeping its queue position.
+
+        Args:
+            side: BUY or SELL
+            quantity: Positive amount filled, less than the order's quantity
+
+        Returns:
+            Updated order or None if that side is empty
+
+        Time complexity: O(1) after finding the best price
+        """
+        price = self.get_best_bid() if side == Side.BUY else self.get_best_ask()
+        if price is None:
+            return None
+
+        queue = self.bids[price] if side == Side.BUY else self.asks[price]
+        order = next(iter(queue.values()))
+        if not 0 < quantity < order.quantity:
+            raise ValueError("Partial fill must be positive and less than the order's quantity")
+
+        updated = order.with_quantity(order.quantity - quantity).with_status(
+            OrderStatus.PARTIAL
+        )
+        queue[order.order_id] = updated  # Updating a key keeps its position
+        self.order_index[order.order_id] = updated
+        return updated
+
     def update_order(self, order: Order):
-        """Update order in index (after partial fill)."""
+        """Replace a resting order in place, keeping its price and priority."""
+        current = self.order_index[order.order_id]
+        if (order.symbol, order.side, order.price) != (current.symbol, current.side, current.price):
+            raise ValueError("Order updates must keep the original symbol, side, and price")
+
+        levels = self.bids if current.side == Side.BUY else self.asks
+        levels[current.price][order.order_id] = order
         self.order_index[order.order_id] = order
     
     def get_statistics(self) -> dict:
         """Get book statistics."""
         total_bid_qty = sum(
-            sum(o.quantity for o in queue)
+            sum(o.quantity for o in queue.values())
             for queue in self.bids.values()
         )
         total_ask_qty = sum(
-            sum(o.quantity for o in queue)
+            sum(o.quantity for o in queue.values())
             for queue in self.asks.values()
         )
         

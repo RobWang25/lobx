@@ -77,18 +77,14 @@ class MatchingEngine:
             
             # Update quantities
             remaining_qty -= match_qty
-            opposing_qty = opposing_order.quantity - match_qty
-            
-            # Remove opposing order from book
-            book.pop_best_order(opposing_side)
-            
-            # Re-add opposing order if partially filled
-            if opposing_qty > 0:
-                updated_opposing = opposing_order.with_quantity(opposing_qty).with_status(
-                    OrderStatus.PARTIAL
-                )
-                book.add_order(updated_opposing)
-            
+
+            # A fully filled order leaves the book. A partially filled one stays
+            # where it is, so it keeps its time priority.
+            if match_qty == opposing_order.quantity:
+                book.pop_best_order(opposing_side)
+            else:
+                book.reduce_best_order(opposing_side, match_qty)
+
             self.total_trades += 1
         
         # Create remaining order object

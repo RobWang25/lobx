@@ -2,7 +2,8 @@
 Unit tests for OrderBook.
 """
 import pytest
-from decimal import Decimal
+from dataclasses import replace
+from decimal import Decimal, localcontext
 from datetime import datetime
 
 from lobx.models import Order, Side, OrderStatus, generate_order_id
@@ -90,6 +91,18 @@ class TestOrderBookBasics:
 
 class TestBestPrices:
     """Test best bid/ask tracking."""
+
+    def test_bid_heap_preserves_exact_price(self, book, sample_buy_order):
+        price = Decimal("100.01")
+        order = replace(sample_buy_order, price=price)
+        with localcontext() as context:
+            context.prec = 3
+            assert book.add_order(order)
+            assert book.get_best_bid() == price
+            assert book.cancel_order(order.order_id)
+            assert book.get_best_bid() is None
+            assert book.add_order(order)
+            assert book.get_best_bid() == price
     
     def test_best_bid_with_multiple_levels(self, book):
         """Test best bid with multiple price levels."""
@@ -178,7 +191,7 @@ class TestOrderCancellation:
         assert Decimal("100.00") in book.bids
         # Only order2 should remain
         assert len(book.bids[Decimal("100.00")]) == 1
-        assert book.bids[Decimal("100.00")][0].order_id == order2.order_id
+        assert book.get_orders_at_price(Side.BUY, Decimal("100.00")) == [order2]
 
 
 class TestFIFOOrdering:
@@ -394,21 +407,46 @@ class TestGetOrder:
         assert len(retrieved) == 3
         assert all(o.price == price for o in retrieved)
 
+    @pytest.mark.parametrize("side", [Side.BUY, Side.SELL])
+    def test_get_orders_at_missing_price_does_not_create_level(self, book, side):
+        assert book.get_orders_at_price(side, Decimal("100.00")) == []
+        assert not book.bids
+        assert not book.asks
+
+
+@pytest.mark.parametrize("quantity", [-1, 0, 10])
+def test_reduce_best_order_rejects_invalid_partial_fill(book, sample_buy_order, quantity):
+    book.add_order(sample_buy_order)
+
+    with pytest.raises(ValueError):
+        book.reduce_best_order(Side.BUY, quantity)
+
+    assert book.peek_best_order(Side.BUY) == sample_buy_order
+    assert book.get_order(sample_buy_order.order_id) == sample_buy_order
+
 
 class TestUpdateOrder:
     """Test order update functionality."""
     
-    def test_update_order_in_index(self, book, sample_buy_order):
-        """Test updating order in index."""
+    def test_update_order_keeps_index_and_queue_in_sync(self, book, sample_buy_order):
         book.add_order(sample_buy_order)
-        
-        # Create updated order with new quantity
+        second = replace(sample_buy_order, order_id=generate_order_id())
+        book.add_order(second)
         updated = sample_buy_order.with_quantity(5)
         book.update_order(updated)
-        
-        # Check it's updated in index
-        retrieved = book.get_order(sample_buy_order.order_id)
-        assert retrieved.quantity == 5
+
+        assert book.get_order(sample_buy_order.order_id) == updated
+        assert book.get_orders_at_price(Side.BUY, updated.price) == [updated, second]
+
+    def test_update_order_cannot_move_a_resting_order(self, book, sample_buy_order):
+        book.add_order(sample_buy_order)
+        moved = replace(sample_buy_order, price=Decimal("101.00"))
+
+        with pytest.raises(ValueError):
+            book.update_order(moved)
+
+        assert book.get_order(sample_buy_order.order_id) == sample_buy_order
+        assert book.peek_best_order(Side.BUY) == sample_buy_order
 
 
 class TestEdgeCases:
