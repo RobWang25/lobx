@@ -18,6 +18,7 @@ from .profiler import PerformanceProfiler, LatencyTracker
 
 
 BACKENDS = ("python", "cpp")
+_warned_about_fallback = False  # The fallback warning is shown once per process
 
 
 def resolve_backend(backend: str | None = None) -> str:
@@ -25,14 +26,17 @@ def resolve_backend(backend: str | None = None) -> str:
     Pick the matching backend: the argument if given, else LOBX_BACKEND, else cpp.
 
     With no choice made, cpp is used if the C++ core is built. If it isn't, this
-    warns and falls back to python. Raises ValueError for an unknown name, and
+    falls back to python, warning the first time. Raises ValueError for an unknown name, and
     RuntimeError if cpp is chosen explicitly but the core isn't built.
     """
     chosen = backend or os.environ.get("LOBX_BACKEND")
     if not chosen:
         if _native.AVAILABLE:
             return "cpp"
-        warnings.warn(f"Using the python backend. {BUILD_HINT}", RuntimeWarning, stacklevel=3)
+        global _warned_about_fallback
+        if not _warned_about_fallback:
+            _warned_about_fallback = True
+            warnings.warn(f"Using the python backend. {BUILD_HINT}", RuntimeWarning, stacklevel=3)
         return "python"
     name = chosen.strip().lower()
     if name not in BACKENDS:

@@ -6,6 +6,7 @@ twice covers both:
     LOBX_BACKEND=python pytest tests
     LOBX_BACKEND=cpp pytest tests
 """
+import warnings
 from collections import OrderedDict
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -38,7 +39,11 @@ class TestChoosingABackend:
     def test_falls_back_to_python_without_the_core(self, monkeypatch):
         monkeypatch.delenv("LOBX_BACKEND", raising=False)
         monkeypatch.setattr(engine_module._native, "AVAILABLE", False)
+        monkeypatch.setattr(engine_module, "_warned_about_fallback", False)
         with pytest.warns(RuntimeWarning, match="isn't built"):
+            assert resolve_backend() == "python"
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # A second warning would raise here
             assert resolve_backend() == "python"
 
     def test_async_without_a_choice_uses_python(self, monkeypatch):

@@ -2,6 +2,7 @@
 #
 # Checked build, with memory and undefined-behaviour checks:
 #   cmake -S cpp -B build/cpp-asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DLOBX_SANITIZE=ON
+#   (add -DLOBX_WERROR=ON to fail on warnings, as CI does)
 #   cmake --build build/cpp-asan
 #   ctest --test-dir build/cpp-asan --output-on-failure
 #
@@ -58,6 +59,13 @@ target_include_directories(lobx_core INTERFACE include)
 target_link_libraries(lobx_core INTERFACE unordered_dense::unordered_dense)
 
 set(LOBX_WARNINGS -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+
+# CI turns this on, so a warning in our code fails the build there. It's off by
+# default, so a newer compiler's new warning doesn't stop anyone building locally.
+option(LOBX_WERROR "Treat warnings in lobx's own code as errors" OFF)
+if(LOBX_WERROR)
+  list(APPEND LOBX_WARNINGS -Werror)
+endif()
 
 # SKBUILD is set when pip builds the package. Then we only need the Python module.
 if(SKBUILD)

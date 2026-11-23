@@ -1,0 +1,148 @@
+# Builds and tests the C++ core and the Python package on Linux and macOS.
+#
+#   cpp          the C++ tests, once with sanitizers and once optimized. The
+#                optimized build also checks the workload result hashes.
+#   python       the pytest suite on both backends, plus the differential test
+#                that compares the Python and C++ engines.
+#   python-only  the pytest suite without building the C++ core, so the pure
+#                Python install keeps working.
+name: CI
+
+on:
+  push:
+    branches: [main, cpp-port]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch cancels the run still going for the old one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.14"
+
+jobs:
+  cpp:
+    name: C++ ${{ matrix.build }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        build: [sanitize, release]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Ninja
+        run: python -m pip install ninja
+
+      # Warnings fail the build, but only for our own targets: the CMake file
+      # applies LOBX_WARNINGS to them, and dependencies are fetched as SYSTEM.
+      - name: Configure
+        run: >
+          cmake -S cpp -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build == 'sanitize' && 'Debug' || 'Release' }}
+          -DLOBX_SANITIZE=${{ matrix.build == 'sanitize' && 'ON' || 'OFF' }}
+          -DLOBX_WERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: C++ tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Generate the workloads
+        if: matrix.build == 'release'
+        run: |
+          python bench/generate_workloads.py
+          # The workloads are seeded, so they must match the committed manifest.
+          git diff --exit-code bench/workload_manifest.json
+
+      - name: Workload hashes, both ladders
+        if: matrix.build == 'release'
+        run: |
+          python bench/check_cpp_results.py build/lobx_replay
+          python bench/check_cpp_results.py build/lobx_replay --ladder map
+
+      # Only checks that the benchmarks run. Timings on shared CI machines
+      # aren't comparable, so nothing is recorded.
+      - name: Benchmarks run
+        if: matrix.build == 'release'
+        run: ./build/lobx_bench --benchmark_filter=/workload/ --benchmark_min_time=0.01s
+
+  python:
+    name: Python, both backends (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+
+      - name: Install dependencies
+        run: >
+          python -m pip install -r requirements.txt -r requirements-test.txt
+          scikit-build-core==1.1.2 nanobind==3.1.0 ninja
+
+      - name: Build the C++ core
+        run: python -m pip install --no-build-isolation -e .
+
+      # Without this, a broken build would only make the C++ tests skip.
+      - name: Check the C++ core loads
+        run: python -c "from lobx import _native; assert _native.AVAILABLE, 'lobx._core did not build'"
+
+      - name: Tests, python backend
+        run: python -m pytest tests -q
+        env:
+          LOBX_BACKEND: python
+
+      - name: Tests, cpp backend
+        run: python -m pytest tests -q
+        env:
+          LOBX_BACKEND: cpp
+
+      - name: Differential, both engines
+        run: |
+          python bench/generate_workloads.py
+          git diff --exit-code bench/workload_manifest.json
+          python bench/differential.py random --ops 200000
+          python bench/differential.py workloads
+          python bench/differential.py session
+
+  python-only:
+    name: Python without the C++ core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-test.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt -r requirements-test.txt
+
+      # The engine warns and falls back to python, and the C++ tests skip.
+      - name: Tests
+        run: python -m pytest tests -q
